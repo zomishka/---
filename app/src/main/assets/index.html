@@ -1,0 +1,762 @@
+<!DOCTYPE html><html lang="ru"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover"><meta name="apple-mobile-web-app-capable" content="yes"><meta name="mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"><title>КАЗАНЬ 88: ФЕНОМЕН</title>
+<style>html,body{margin:0;height:100%;background:#000;overflow:hidden;touch-action:none;-webkit-user-select:none;user-select:none;-webkit-touch-callout:none}body{display:flex;justify-content:center;align-items:center;box-sizing:border-box;padding:env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left)}canvas{display:block;touch-action:none}#nm{position:fixed;display:none;z-index:5;box-sizing:border-box;background:transparent;border:0;outline:0;color:transparent;caret-color:#39ff14;font-family:monospace;padding:0 0 0 10px}#rot{display:none;position:fixed;inset:0;background:#000e;color:#ddd;font:20px monospace;align-items:center;justify-content:center;text-align:center;z-index:9;padding:20px}@media(orientation:portrait){#rot{display:flex}}</style>
+<div id="rot">Поверни телефон горизонтально ↻</div><canvas id="cv" width="1600" height="1000"></canvas><input id="nm" maxlength="14" autocomplete="off" autocapitalize="words" spellcheck="false" enterkeyhint="done">
+<script>
+// ===== 1. CONFIG =====
+const cv=document.getElementById('cv'),X=cv.getContext('2d');
+const CL={bg:'#1a1a1a',red:'#8b0000',gr:'#c0c0c0',te:'#2f4f4f',neon:'#39ff14'},FT='14px monospace';
+// ===== 2. DATA =====
+// группировки: [название, цвет, лидер, реплика, штаб]
+const G={
+tp:['Тяп-Ляп','#b22222','Старик Гарик','Сила — закон. Слабых во дворе не держат, чушпан.','dvor'],
+do:['Дом Обороны','#4682b4','Борода','У нас дисциплина. Спорт, порядок и свой интерес.','park'],
+ce:['Центр','#daa520','Профессор','Улицы любят умных. Связи дороже кулаков.','baum'],
+mi:['Мирный','#32cd32','Малой','Мы молодые, нам всё надо сразу. Ты с нами или нет?','savin'],
+go:['Горки','#ff8c00','Качок','Качалка, режим, сила. Слабаку тут делать нечего.','gym'],
+ki:['Кировский','#8a2be2','Бригадир','С завода мы. Своих бригада не бросает.','kpp'],
+zh:['Жилка','#20b2aa','Коммерс','Рынок любит тишину. Давай без шума, по-хорошему.','rynok'],
+sl:['Татарская слобода','#c71585','Абый','Старших уважай, улым. Традиции не купишь.','sloboda']};
+// локации: [название, группировка, связи, x, y] (x,y — для карты)
+const L={
+dvor:['Двор в Теплоконтроле','tp',['vokzal','obshaga'],540,60],
+park:['Дербышкинский парк','do',['vokzal'],640,120],
+baum:['Улица Баумана / Центр','ce',['vokzal','kreml'],350,110],
+savin:['Дворы Ново-Савиново','mi',['vokzal','flat'],570,220],
+gym:['Спортзал «Горки»','go',['vokzal'],640,320],
+kpp:['Заводской КПП','ki',['vokzal'],140,80],
+rynok:['Жилплощадка / рынок','zh',['vokzal','ment'],110,230],
+sloboda:['Татарская слобода','sl',['vokzal'],290,270],
+obshaga:['Общага / ПТУ','',['dvor','flat'],440,340],
+kreml:['Казанский Кремль','',['baum'],330,30],
+vokzal:['Вокзал','',['dvor','park','baum','savin','gym','kpp','rynok','sloboda','strelka'],350,200],
+strelka:['«Стрелка» / набережная','',['vokzal'],200,350],
+flat:['Твоя квартира','',['savin','obshaga'],520,280],
+ment:['Милицейский участок','',['rynok'],40,160]};
+// особые NPC: [имя, цвет, текст, [[реплика, эффекты, итог, мин.деньги]]]
+// эффекты: h здоровье, m деньги, s сила, i ум, c харизма, hon/pow/cun понятия, rep репутация у своих, id группировки, f:флаг, end:концовка
+const SP={
+obshaga:()=>['Вахтёрша','#888','Куда без пропуска? А, свой... Слухи нынче дорогие.',[['Дать сигарет за слухи','m-5 i+1 f:smokes','Шепчет: на Стрелке скоро будет большой сход.'],['Пройти молча','','Фыркнула вслед.']]],
+kreml:()=>['Экскурсовод','#999','Эти стены видали и не такое.',[['Послушать историю','i+1 hon+1','Стало спокойнее на душе.'],['Спросить про районы','i+1 c+1','Теперь знаешь, чья земля где.']]],
+vokzal:()=>['Носильщик','#999','Поезда уходят в Москву. Говорят, там жизнь. А здесь — понятия.',[['Купить слухи (1 р.)','m-1 i+1','Скоро на Стрелке соберутся все районы.',1],['Билет на Москву (20 р.)','m-20 f:ticket','Плацкарт до Москвы. Мало ли.',20],['Отойти','','']]],
+ment:()=>['Капитан Рамазанов','#4a6fa5','Задержали твоего знакомого. Сдашь, кто был с ним — отпущу и рублей подкину.',[['Сдать друга (+100р)','m+100 hon-3 cun+1 rep-15 f:snitch','Подписал. Руки потом долго не отмывались.'],['Промолчать','hon+2 h-10 rep+3','Капитан хмыкнул, но уважение осталось.'],['Вступиться за задержанного','hon+2 pow+1 h-15 rep+5','Выгнали, зато двор узнает.'],['Договориться ксивой/справкой (-20р)','m-20 cun+1','Отпустили обоих. Тихо.',20]]],
+rynok:()=>['Барыга','#b8860b','Всё есть, всё с-за бугра. Цены не торгуются, дорогой.',[['Джинсы «Монтана» (170 р.)','m-170 c+3 f:jeans','Фирма! Из-под полы.',170],['Кроссовки «Адидас» (110 р.)','m-110 c+1 f:shoes','С-за бугра, в коробке.',110],['Куртка кожаная (230 р.)','m-230 c+2 f:jacket','Кожа, настоящая. Дорого, но солидно.',230],['Кассета с записью (8 р.)','m-8 c+1 f:tape','Переписано с оригинала.',8],['Справка липовая (10 р.)','m-10 f:spravka','С печатью. Почти как настоящая.',10],['Ксива (80 р.)','m-80 cun+1 f:ksiva','Корочка. Выглядит солидно.',80],['Кастет (15 р.)','m-15 pow+2 f:kastet','Холодит ладонь. Не бери в дело без нужды.',15],['Уйти','','']]],
+flat:()=>['Твоя кровать','#555','Дома тихо. Можно отоспаться и записать мысли.',[['Спать и сохранить игру','h+40 f:save','Выспался.'],['Выйти','','']]],
+strelka:()=>act()<15?['Ветер','#555','Пока тут тихо. Время ещё не пришло.',[['Уйти','','']]]:
+['Смотрящий','#8b0000','Все районы собрались на набережной. Слово за тобой. Что сделаешь?',[
+['Встать за свою группировку',()=>auth()>=35&&P.rot<50&&rk()>=4?'end:s':'end:i','Ты сделал выбор.'],
+['Договориться со всеми',()=>(P.cun+P.hon>=6&&P.rot<30)?'end:l':'end:i','Ты сделал выбор.'],
+['Сдать всех милиции',()=>(fl.snitch||fl.informer||P.cun>=3)?'end:m':'end:i','Ты сделал выбор.'],
+['Уехать с вокзала',()=>(fl.ticket||P.m>=30)?'end:e':'end:i','Ты сделал выбор.']]]};
+// случайные события: [текст, [[реплика, эффекты, итог]]]
+const EV=[
+['Стрелка на нейтралке: чужие требуют ответа за слова друга.',[['Вступиться за друга','hon+2 h-15 rep+5','Получил по рёбрам, но свои запомнили.'],['Сбежать','hon-2 cun+1 rep-8','Убежал. Друг не простит.'],['Договориться (30р)','m-30 cun+1','Откупился. Мирно, но дорого.']]],
+['Милицейская облава! Проверяют документы.',[['Показать справку','cun+1','Прошёл. Справка работает.'],['Рвануть через дворы','h-5 cun+1 rep-3','Ушёл, но колено ноет.'],['Дать на лапу (20р)','m-20','Козырнули и отпустили.']]],
+['В тёмном проходе — трое из чужого района.',[['Дерзить','pow+1 h-12','Побили, но не прогнулся.'],['Назвать свою группировку','rep+3 cun+1','Переглянулись и пропустили.'],['Обойти двором','cun+1','Не хочешь лишних проблем.']]],
+['Старший предлагает «поднять тему»: перепродать партию джинсов.',[['Взяться','m+40 hon-1 rep+3','Деньги пришли быстро.'],['Отказаться','hon+1','Старший пожал плечами.']]],
+['В толпе тащат кошелёк у бабушки.',[['Вступиться','hon+2 pow+1 h-5','Вернул кошелёк. Бабушка перекрестила.'],['Промолчать','hon-1','Отвернулся. Неприятный осадок.']]],
+['Драка в очереди за сахаром по талонам.',[['Разнять','pow+1 h-8','Разнял, получил локтем.'],['Уйти','cun+1',''],['Подлить масла','cun+1 hon-1 m+10','Пока дрались, взял свой сахар.']]],
+['Приглашение на сходняк: ждут к вечеру.',[['Пойти','rep+5 cun+1 m-10','Слушал, мотал на ус.'],['Отказаться','rep-5','Решили, что ты зазнался.']]],
+['Встреча со старшим: читает тебе мораль.',[['Слушать молча','hon+1 rep+3','Уважение растёт.'],['Огрызнуться','pow+1 rep-5','Старший запомнил.']]],
+['Наводка на коммерса: «лёгкие деньги».',[['Отказаться','hon+2','Лёгкие деньги — не твой путь.'],['Предупредить коммерса','hon+1 m+20','Торговец отблагодарил.'],['Пойти по наводке','m+60 hon-3 rep-5','Деньги жгут карман.']]],
+['Проверка документов у вокзала.',[['Показать ксиву','cun+1','Козырнули. Уважают.'],['Откупиться (10р)','m-10','Отпустили.']]],
+['Одноклассник из прошлого просит помощи.',[['Помочь (20р)','m-20 hon+1','Он благодарил, как мог.'],['Послать','hon-1','Он ушёл, сгорбившись.']]],
+['Заболел: ломит кости.',[['Лечиться (15р)','m-15 h+10','Помогли таблетки.'],['Терпеть','h-10','Пересилил, но сил нет.']]],
+['Слух о предателе в вашей среде.',[['Сказать старшим (сдать друга)','rep+8 hon-2 f:snitch','Старшие довольны, друг — нет.'],['Промолчать','hon+1','Не твоё дело.'],['Узнать правду','i+1 cun+1','Слух оказался пустым.']]],
+['Тебя вызывают на разборку.',[['Принять вызов','pow+1 h-20 rep+10','Бой был тяжёлым, зато двор говорит.'],['Отказаться','rep-10','Говорят, струсил.'],['Договориться','cun+1 hon+1','Нашёл слова.']]],
+['На улице продают кассету «Кино».',[['Купить (6 р.)','m-6 c+1 f:tape','Музыка греет душу.'],['Пройти мимо','','']]],
+['Девчонка из соседнего двора улыбнулась.',[['Подойти','c+1','Поболтали. Приятно.'],['Сделать вид, что не заметил','','']]],
+['Старушка просит донести сумки.',[['Помочь','hon+1','Сказала: «Благослови тебя бог».'],['Отказаться','','']]],
+['Турнир по боксу в ПТУ.',[['Выйти на ринг','s+1 h-10 c+1','Проиграл по очкам, но уважают.'],['Смотреть','','']]],
+['Шахматы во дворе: старики играют на деньги.',[['Сыграть','i+1 m+10','Обыграл деда. Подвинули стул.'],['Пройти','','']]],
+['Ночью начался дождь, ночуешь под навесом.',[['Переждать','h-5 hon+1','Утро выдалось серым.']]],
+['Сборщики «дани» трясут ларёчника.',[['Заплатить за него (20р)','m-20 hon+1','Тихо рассчитались.'],['Вступиться','hon+1 h-10 rep-3','Пришлось отбиваться.'],['Пройти мимо','hon-1','Нехорошо.']]],
+['Знакомый милиционер предлагает «помогать».',[['Согласиться','m+50 hon-3 f:informer','Теперь ты информатор.'],['Отказаться','hon+1','Сказал: «Передумаешь — приходи».']]],
+['Друга зовут в бегство из города: «поехали».',[['Остаться','hon+1 rep+3','Остался. Двор — твой дом.'],['Сбежать','cun+1 hon-2 rep-8 f:ticket','Билет в кармане, на душе камень.']]]];
+const END={
+s:['СМОТРЯЩИЙ','Район признал тебя. Слово твоё — закон двора, но на плечи легла тяжесть понятий.'],
+i:['ИЗГОЙ','Ни своих, ни чужих. Двор отвернулся. Ты идёшь один по набережной.'],
+m:['МИЛИЦИЯ','Ты сдал всех. Погоны и кабинет — цена доверия двора. Звонков больше нет.'],
+e:['ЭМИГРАНТ','Поезд увозит тебя из Казани. Феномен остаётся за стеклом, в памяти.'],
+l:['ЛЕГЕНДА ДВОРА','Ты договорился со всеми. О тебе будут рассказывать — не про силу, а про ум и честь.']};
+// ===== 3. STATE =====
+let S='disc',P,R,fl={},dr=[],step=0,seed=1,loc='dvor',sc=0,talked={},px=400,py=420,tgt=null,D,pend,ES,sel=null,nameBuf='',msg='',mt=0,
+opt={snd:false,scan:true,rain:true},keys={},btns=[],mx=0,my=0,ppl=[],pk=[],tab=0,ds=0,tick=0,tr=[],actx,moving=0,back='menu',glows=[];
+const cl=(v,a,b)=>Math.max(a,Math.min(b,v)),act=()=>Math.min(15,Math.floor(step/9)+1);
+const auth=()=>{let o=0;for(const k in R)if(k!=P.g)o+=R[k];return Math.round(R[P.g]*.6+o/7*.4)};
+const log=t=>dr.push('День '+(Math.floor(step/3)+1)+': '+t),toast=t=>{msg=t;mt=150};
+const hs=s=>{let h=7;for(const c of s)h=(h*31+c.charCodeAt(0))>>>0;return h},rr=(h,i)=>(Math.imul(h^(i*2246822519),2654435761)>>>0)/4294967296;
+const inG=()=>['play','dlg','trav'].includes(S),tod=()=>S=='cut'&&cutT>=0?cutT:inG()?[0,1,3][step%3]:3,rainy=()=>opt.rain&&P&&inG()&&(Math.floor(step/3)+(P.w||0))%4==3;
+const NAMES=['Рустам','Ильдар','Марат','Айрат','Костя','Серёга','Димон','Тимур','Ринат','Вадик','Рафаэль','Ильнур','Камиль','Булат','Фанис','Азат','Динар','Ленар','Салават','Артур','Эдуард','Андрей','Саша','Лёха','Женя','Паша','Игорь','Олег','Руслан','Данис','Радик','Альберт','Венер','Мансур','Ришат','Тагир','Нияз','Вилен','Анвар','Харис','Юра','Толик','Вова','Коля','Миша','Борис','Григорий','Слава','Стас','Макс','Гена','Витя','Валера','Жека','Санёк','Гоша'];
+const ITEMS={jacket:'Куртка',shoes:'Кроссовки',kastet:'Кастет',ksiva:'Ксива',tape:'Кассета',smokes:'Сигареты',spravka:'Справка',ticket:'Билет',medkit:'Аптечка'};
+const SN={obshaga:'Вахтёрша',kreml:'Экскурсовод',vokzal:'Носильщик',ment:'Капитан Рамазанов',rynok:'Барыга',flat:'Кровать',strelka:'Смотрящий'};
+const CIV=[['Бабушка','#7a5c8a','Раньше лучше жили. А вы, молодёжь, всё по подворотням.'],['Школьник','#3a8f5a','Дядь, правда, что на Стрелке скоро большой сход?'],
+['Торговка','#a65b2a','Семечки, пирожки! Горячие, с капустой!',['Купить пирожок (15 коп.)','m-0.15 h+3','Тёплый, с капустой.',0.15]],['Рабочий','#556b8a','Со смены иду. Завод стоит, зарплату талонами дают.'],
+['Студентка','#c06a8a','Я на Баумана хожу — там интересней всего.'],['Дед с газетой','#8a8a6a','В «Вечерней Казани» опять про хулиганов пишут.'],
+['Спекулянт','#8a6a2a','Джинсы, жвачка, кассеты. Только для своих.',['Купить жвачку (1 р.)','m-1 c+1','Импортная! Хватит на неделю.',1]],['Таксист','#6a6a6a','Подвезти? Шучу, на вокзал пешком быстрее.'],
+['Мальчишка с мячом','#d0a030','Сыграем? У нас футбол до темноты.',['Сыграть в футбол','s+1 h-3','Набегался, но руки-ноги работают.']],['Дворник','#5a7a5a','Утром метёшь, а вечером опять мусор.'],
+['Продавщица','#b05a5a','Сахар по талонам, мужчина, не толкайтесь.'],['Парень с гитарой','#4a4a8a','Спеть «Группу крови»? Бесплатно.',['Послушать песню','c+1 hon+1','Мурашки по спине.']]];
+const RUM=['В Кировском на заводе опять неспокойно.','Говорят, в Центре завёлся новый смотрящий.','Милиция готовит облаву на вокзале.','Жилка платит бригадам за тишину.','Старики из Тяп-Ляпа не любят чужаков.','В Горках качалка открыла новый зал.','Ночью на Стрелке видели чёрную «Волгу».','Мирный набирает молодых — пацаны горячие.'];
+function save(){LS.s('k88',JSON.stringify({P,R,fl,dr,step,seed,loc,talked}));toast('Игра сохранена')}
+function load(){const d=JSON.parse(LS.g('k88'));({P,R,fl,dr,step,seed,loc,talked}=d);P.w=P.w||0;P.rot=P.rot||0;P.deb=P.deb||[];P.enc=P.enc||{};P.vis=P.vis||{};P.xp=P.xp||0;P.rk=P.rk||0;P.sq=P.sq||[];P.rob=P.rob||{};P.wd=P.wd||[];P.sd=P.sd||{};P.lt=P.lt||0;P.tn=P.tn||'';P.hosp=P.hosp||0;P.deb=P.deb.map(d=>typeof d=='string'?{n:d,s:3,kid:1}:d);if(P.hosp>0){hf=2;enter(loc,4)}else enter(loc,loc=='flat'?1:0);S='play'}
+function newGame(g){seed=Date.now()%99999;P={n:nameBuf||rndName(),h:100,m:50,s:3,i:3,c:3,hon:0,pow:0,cun:0,g,w:Math.floor(Math.random()*4),rot:0,deb:[],enc:{},vis:{},xp:0,rk:0,sq:[],rob:{},wd:[],sd:{},lt:0,tn:'',hosp:0};
+R={};for(const k in G)R[k]=k==g?30:Math.floor(rnd()*11)-5;fl={};dr=[];step=0;talked={};log('Избит чужими. Решил вступить в «'+G[g][0]+'».');
+enter(G[g][4],0);P.h=60;addWound('lip');addWound('eye');cutscene(INTRO(g),()=>{if(!story())S='play'})}
+// ===== 6. RANDOM =====
+function rnd(){seed=seed|0;seed=seed+0x6D2B79F5|0;let t=Math.imul(seed^seed>>>15,1|seed);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296}
+// ===== 5. SCENES / логика =====
+function fx(s){if(typeof s=='function')s=s();for(const t of s.split(' ')){if(!t)continue;
+if(t=='rel1'){P.deb.shift();continue}const fm=t.match(/^fight(\d)(h?)$/);if(fm){pf={n:+fm[1],h:!!fm[2]};continue}if(t.slice(0,4)=='win:'){pw=t.slice(4);continue}if(t=='f:save'){save();continue}if(t.slice(0,2)=='f:'){fl[t.slice(2)]=1;if(t=='f:in'){toast('Ты принят. Теперь ты — Скорлупа.');log('Принят в группировку: Скорлупа')}continue}if(t.slice(0,4)=='end:'){pend=t.slice(4);continue}
+const m=t.match(/^([a-z]+)([+-]\d+(?:\.\d+)?)$/);if(!m)continue;let k=m[1],n=+m[2];if(k=='rep')k=P.g;if(k==P.g&&n>0)P.xp=(P.xp||0)+n;
+if(k in R)R[k]=cl(R[k]+n,-100,100);else if(k=='m')P.m=Math.round(Math.max(0,P.m+n)*100)/100;else if(k in P)P[k]=k=='h'?cl(P[k]+n,0,100):P[k]+n}P.rot=cl(P.rot||0,0,100);rkCheck()}
+function dlg(name,col,text,opts){D={name,col,text,opts,res:null,n:0};S='dlg'}
+function fin(t){D.res=t;D.opts=[];D.n=0}
+function pick(i){const o=D.opts[i];if(!o)return;let f=o[1],need=o[3]||0;
+if(typeof f=='string'){const m=f.match(/m-(\d+(?:\.\d+)?)/);if(m)need=Math.max(need,+m[1]);const it=f.match(/f:(jacket|shoes|kastet|tape|spravka|ksiva|jeans|clock|ushanka|book|expander|chess)/);if(it&&fl[it[1]])return fin('Это у тебя уже есть.')}
+if(need&&P.m<need)return fin('Не хватает рублей.');fx(f);if(f&&o[0]!='Начать')log(o[0]);fin(typeof o[2]=='function'?o[2]():o[2]||'…')}
+function closeD(){D=null;if(P.h<=0&&!pend&&!pf)pend='i';if(pend){ES=pend;pend=null;S='end';return}if(pf){const f=pf;pf=null;startFight(f);return}if(pl){pl=0;enter(prv,prv=='flat'?1:0);S='play';return}if(nq){const f=nq;nq=null;S='play';f();return}S='play'}
+function skipD(){const t=D.res||D.text;if(D.n<t.length){D.n=t.length;return}if(D.res||!D.opts.length)closeD()}
+function leader(g){P.enc[g]=(P.enc[g]||0)+1;if(P.rot>=40&&talked[loc]!==step){talked[loc]=step;return dlg(G[g][2],G[g][1],'Слыхал, ты малых на счётчик ставишь. Крысятничаешь? Старшим такое не по нутру.',[['Оправдаться','rep-3 rot-3','Хмуро выслушал.'],['Молча уйти','rep-8','Презрительно сплюнул.']])}if(talked[loc]===step)return dlg(G[g][2],G[g][1],'Мы уже говорили. Приходи позже.',[['Ладно','','']]);talked[loc]=step;
+dlg(G[g][2],G[g][1],'['+rn()+'] '+G[g][3],[['Уважительно: «Здорово. Я по понятиям.»',g+'+8 hon+1','Кивнул: «Вижу, воспитанный».'],['Дерзко: «Я сам себе авторитет.»',g+'-10 pow+1','Взгляд потяжелел. Враг или уважение — время покажет.'],
+['Хитро: «Есть тема, обоим выгодно.»',g+'+4 cun+1 m+15','Прищурился: «Умный. Рубль на разговор».'],['Уйти молча','','']])}
+function talkP(p){if(p.d===step)return dlg(p.n,p.c,'Мы уже поговорили. Ничего нового.',[['Ладно','','']]);p.d=step;
+if(p.mem){const g=L[loc][1];return dlg(p.n,p.c,p.t,[['Сыграть в карты на 10р',()=>rnd()<.5?'m+10 cun+1':'m-10','Карты розданы. Деньги сменили хозяина.',10],['Расспросить про лидера','i+1 '+g+'+2','Лидер уважает силу, но ценит смекалку.'],['Уйти','','']])}
+const o=[['Расспросить о районе','i+1',RUM[hs(p.n+step)%RUM.length]]];if(p.ex)o.push(p.ex);o.push(['Обчистить карманы',()=>steal(p),()=>p._r]);o.push(['Поставить на счётчик',()=>{nq=()=>squeeze(p);return 'm+0'},'Ты подходишь ближе и понижаешь голос...']);o.push(['Уйти','','']);dlg(p.n,p.c,p.t,o)}
+function enter(to,s){loc=to;sc=s;px=400;py=s?420:430;tgt=null;ppl=[];pk=[];const h=hs(to+step),g=L[to][1];
+if(!s){const n=4+Math.floor(rr(h,1)*3);for(let i=0;i<n;i++){const c=CIV[Math.floor(rr(h,i+30)*CIV.length)],p={x:70+rr(h,i+50)*660,y:330+rr(h,i+70)*110,tx:0,ty:0,c:c[1],hc:['#222','#a52','#ddd','#432'][i%4],n:c[0],t:c[2],ex:c[3],d:0};p.f=()=>talkP(p);p.spr=1;ppl.push(p)}
+for(let i=0;i<3;i++)if(rr(h,i+90)>.35)pk.push({x:50+rr(h,i+100)*700,y:320+rr(h,i+110)*120,v:[.03,.05,.1,.15,.2,.5,1][Math.floor(rr(h,i+120)*7)],n:['монетка','мелочь','пустая бутылка','забытый рубль','медяки'][i%5]})}
+else if(g)['Вовчик','Рафик'].forEach((n,i)=>{const p={x:180+i*440,y:340+i*30,c:G[g][1],hc:'#111',n:'Шестёрка '+n,t:'Мы — '+G[g][0]+'. Тут свои, чужих не любим.',mem:1,d:0,spr:1};p.f=()=>talkP(p);ppl.push(p)})}
+function openTravel(){tr=L[loc][2].filter(k=>k!='strelka'||act()>=15);S='trav'}
+function ents(){const a=[],g=L[loc][1];
+if(sc==0){if(g)a.push({x:400,y:205,n:'ШТАБ «'+G[g][0]+'»',door:1,f:()=>{enter(loc,1)}});
+if(SP[loc])a.push({x:g?640:400,y:350,n:SN[loc],c:loc=='ment'?'#4a6fa5':'#aaa',hc:'#333',spr:1,f:()=>{const s=SP[loc]();dlg(s[0],s[1],s[2],s[3])}});
+a.push({x:400,y:462,n:'ВЫХОД (в другой район)',door:2,f:openTravel})}
+else{if(g)a.push({x:400,y:310,n:G[g][2],c:G[g][1],hc:'#111',spr:1,f:()=>leader(g)});
+if(loc=='flat')a.push({x:580,y:350,n:'Кровать',f:()=>{const s=SP.flat();dlg(s[0],s[1],s[2],s[3])},box:1});
+a.push({x:400,y:462,n:g?'Выйти на улицу':'ВЫХОД',door:2,f:g?()=>{enter(loc,0);py=240}:openTravel})}
+for(const p of ppl)a.push(p);for(const k of pk)a.push({x:k.x,y:k.y,n:k.n+' (+'+fm(k.v)+')',pick:1,f:()=>{P.m+=k.v;pk.splice(pk.indexOf(k),1);toast('Нашёл: '+k.n+' +'+fm(k.v))}});return a}
+function near(){let b=null,bd=80;for(const e of ents()){const q=Math.hypot(e.x-px,(e.y-py)*(e.door?.5:1));if(q<bd){bd=q;b=e}}return b}
+// ===== 7. UI / графика =====
+function T(s,x,y,c,f,al){X.fillStyle=c||CL.gr;X.font=f||FT;X.textAlign=al||'left';X.fillText(s,x,y)}
+function wrap(t,w,x,y,lh,c){X.fillStyle=c||CL.gr;X.font=FT;X.textAlign='left';let l='';for(const wd of t.split(' ')){if(X.measureText(l+wd).width>w){X.fillText(l,x,y);y+=lh;l=''}l+=wd+' '}X.fillText(l,x,y);return y+lh}
+function box(x,y,w,h,c){X.fillStyle='#0d0d0df2';X.fillRect(x,y,w,h);X.strokeStyle=c||CL.gr;X.lineWidth=2;X.strokeRect(x,y,w,h)}
+function btn(x,y,w,h,label,f,col,fs){btns.push({x,y,w,h,f});const hov=mx>=x&&mx<=x+w&&my>=y&&my<=y+h,c=col||CL.neon;
+X.fillStyle=hov?c+'44':'#141414';X.fillRect(x,y,w,h);X.strokeStyle=hov?c:'#555';X.lineWidth=2;X.strokeRect(x,y,w,h);T(label,x+w/2,y+h/2+5,hov?c:CL.gr,fs||'14px monospace','center');return hov}
+function bar(x,y,w,h,f,c,lb){X.fillStyle='#000';X.fillRect(x,y,w,h);X.fillStyle=c;X.fillRect(x,y,w*cl(f,0,1),h);X.strokeStyle='#555';X.strokeRect(x,y,w,h);if(lb)T(lb,x+w/2,y+h-1,'#fff','10px monospace','center')}
+function man(x,y,c,hc,mv,me){const b=mv?Math.sin(tick/3)*3:0;
+X.fillStyle='rgba(0,0,0,.35)';X.beginPath();X.ellipse(x,y+14,13,4,0,0,7);X.fill();
+X.fillStyle=me&&fl.shoes?'#eee':'#1c1c1c';X.fillRect(x-8,y+3,6,11+b/2);X.fillRect(x+2,y+3,6,11-b/2);X.fillStyle='#2a2a33';X.fillRect(x-8,y-2,6,8);X.fillRect(x+2,y-2,6,8);
+X.fillStyle=c;X.fillRect(x-11,y-22,22,26);X.fillRect(x-14,y-21+b,4,15);X.fillRect(x+10,y-21-b,4,15);X.fillStyle='rgba(0,0,0,.22)';X.fillRect(x-11,y-22,3,26);X.fillRect(x+8,y-22,3,26);
+X.fillStyle='#e0b896';X.fillRect(x-14,y-7+b,4,3);X.fillRect(x+10,y-7-b,4,3);X.fillRect(x-7,y-37,14,15);X.fillStyle=hc;X.fillRect(x-8,y-40,16,7);
+X.fillStyle='#000';X.fillRect(x-4,y-31,2,2);X.fillRect(x+2,y-31,2,2);if(me){X.fillStyle=G[P.g][1];X.fillRect(x+10,y-15-b,4,4);if(fl.kastet){X.fillStyle='#bbb';X.fillRect(x+10,y-5-b,5,3)}}}
+function drawMap(ox,oy,sc2,full){X.save();X.translate(ox,oy);X.scale(sc2,sc2);X.strokeStyle='#444';X.lineWidth=2/sc2;
+for(const k in L)for(const n of L[k][2]){X.beginPath();X.moveTo(L[k][3],L[k][4]);X.lineTo(L[n][3],L[n][4]);X.stroke()}
+for(const k in L){const l=L[k];X.fillStyle=l[1]?G[l[1]][1]:'#777';X.fillRect(l[3]-9,l[4]-9,18,18);if(P){X.strokeStyle=!l[1]?'#888':l[1]==P.g?'#3c3':'#d33';X.lineWidth=3/sc2;X.strokeRect(l[3]-11,l[4]-11,22,22)}
+if(k==loc){X.strokeStyle=CL.neon;X.lineWidth=3/sc2;X.strokeRect(l[3]-13,l[4]-13,26,26)}
+if(full){X.fillStyle=CL.gr;X.font='12px monospace';X.textAlign='center';X.fillText(l[0],l[3],l[4]+24)}}X.restore()}
+const SK=[['#7a8fa6','#d9b99b'],['#4a7fb5','#bcd6e8'],['#3a2a4a','#d0703a'],['#05060f','#1a2040']];
+function sky(){const t=tod(),c=SK[t],g=X.createLinearGradient(0,44,0,250);g.addColorStop(0,c[0]);g.addColorStop(1,c[1]);X.fillStyle=g;X.fillRect(0,44,800,206);
+if(t==3){X.fillStyle='#fff';for(let i=0;i<40;i++)if((i+(tick/40|0))%7)X.fillRect((i*97+SEG*131)%800,50+(i*53)%140,1+i%2,1+i%2);if(SEG==1){X.fillStyle='#e8e8c0';X.beginPath();X.arc(680,90,16,0,7);X.fill()}}
+else if(SEG==1){X.fillStyle=t==2?'#ff8a3a':'#fff6b0';X.beginPath();X.arc(t==0?120:t==2?690:420,t==1?80:150,18,0,7);X.fill()}}
+const LT={dvor:'pan',savin:'pan',obshaga:'pan',park:'tree',gym:'gym',kpp:'fact',rynok:'stall',baum:'old',sloboda:'wood',kreml:'kreml',vokzal:'vok',strelka:'river',ment:'ment'};
+function bgStyle(){const k=loc,s=LT[k],h=hs(k+SEG),n=tod()>=2;
+const win=(x,y,w,hh)=>{for(let i=0;i<w/14-1;i++)for(let j=0;j<hh/18-1;j++){X.fillStyle=n&&rr(x+i*7+j*13,j+1)>.45?'#ffd45a':'#27323d';X.fillRect(x+6+i*14,y+8+j*18,8,11)}};
+const R_=(c,x,y,w,hh)=>{X.fillStyle=c;X.fillRect(x,y,w,hh)};
+if(s=='pan')for(let i=0;i<5;i++){const bx=i*165+10,bh=110+Math.floor(rr(h,i)*60);R_(['#5a5f66','#6b6258','#4e5560'][i%3],bx,250-bh,140,bh);win(bx,250-bh,140,bh);R_('#333',bx-2,244-bh,144,6)}
+else if(s=='tree'){for(let i=0;i<9;i++){R_('#3a2a1a',i*95+44,205,8,45);X.fillStyle=['#2a5a2a','#1f4a25','#336633'][i%3];X.beginPath();X.arc(i*95+48,195,32,0,7);X.fill()}R_('#554',0,238,800,12)}
+else if(s=='gym'){R_('#45474a',160,120,480,130);R_('#a22',240,140,320,40);T('СПОРТЗАЛ «ГОРКИ»',400,167,'#fff','bold 22px monospace','center');R_('#222',330,200,140,6);R_('#222',320,190,10,26);R_('#222',470,190,10,26);R_('#111',200,200,40,50)}
+else if(s=='fact'){R_('#4a4040',0,170,800,80);for(let i=0;i<3;i++){const cx=140+i*220;for(let j=0;j<8;j++)R_(j%2?'#a33':'#ccc',cx,80+j*11,34,11);X.fillStyle='rgba(200,200,200,.35)';for(let j=0;j<4;j++){X.beginPath();X.arc(cx+17+Math.sin(tick/30+j)*8,70-j*16-(tick/3%16),10+j*3,0,7);X.fill()}}win(30,180,740,60)}
+else if(s=='stall')for(let i=0;i<6;i++){const sx=i*130+20;for(let j=0;j<6;j++)R_(j%2?'#fff':['#c33','#36c','#3a3'][i%3],sx+j*14,160,14,24);R_('#5a4a3a',sx,184,84,66);R_('#d8c070',sx+8,200,68,10);R_('#b55',sx+14,190,12,10)}
+else if(s=='old')for(let i=0;i<4;i++){const bx=i*205;R_(['#c9b98f','#a9b8a0','#b9a0a0','#b0b0c0'][i],bx,90,200,160);for(let j=0;j<4;j++){R_('#223',bx+14+j*46,130,28,44);X.fillStyle='#223';X.beginPath();X.arc(bx+28+j*46,130,14,Math.PI,0);X.fill();if(n)R_('#ffd45a',bx+18+j*46,140,20,28)}R_('#8a7a5a',bx,86,200,8)}
+else if(s=='wood'){for(let i=0;i<4;i++){const bx=i*130+10;R_('#6a4a2a',bx,170,100,80);X.fillStyle='#4a2a1a';X.beginPath();X.moveTo(bx-8,170);X.lineTo(bx+50,120);X.lineTo(bx+108,170);X.fill();R_(n?'#ffd45a':'#233',bx+36,190,28,26)}
+R_('#d8d8d0',620,50,18,200);X.fillStyle='#2a8a6a';X.beginPath();X.moveTo(616,50);X.lineTo(629,10);X.lineTo(642,50);X.fill();T('☪',629,30,'#fff','14px monospace','center')}
+else if(s=='kreml'){R_('#d9d7c8',0,170,800,80);for(let i=0;i<40;i++)R_('#d9d7c8',i*20,162,12,10);for(let i=0;i<5;i++)R_('#c9c7b8',250+i*10,60+i*18,100-i*20,18);X.fillStyle='#ccc';X.beginPath();X.moveTo(290,60);X.lineTo(300,30);X.lineTo(310,60);X.fill();
+for(const x of [520,580,640,700]){R_('#e8e8e0',x,70,12,100);X.fillStyle='#2a7fbf';X.beginPath();X.moveTo(x-3,70);X.lineTo(x+6,40);X.lineTo(x+15,70);X.fill()}}
+else if(s=='vok'){R_('#6a6258',100,110,600,140,'');R_('#ddd',382,112,36,36);T('12',400,136,'#222','bold 14px monospace','center');X.strokeStyle='#222';X.beginPath();X.arc(400,130,16,0,7);X.stroke();R_('#2e5a3a',0,190,800,50);for(let i=0;i<14;i++)R_(n?'#ffd45a':'#9ab',i*58+8,200,36,16);R_('#222',0,238,800,8);win(120,120,260,70)}
+else if(s=='river'){for(let i=0;i<14;i++)R_('#223',i*60,130-(i*37)%50,40,120);const g=X.createLinearGradient(0,170,0,250);g.addColorStop(0,'#2a5a80');g.addColorStop(1,'#10243a');X.fillStyle=g;X.fillRect(0,170,800,80);
+X.fillStyle='rgba(255,255,255,.3)';for(let i=0;i<10;i++)X.fillRect((i*90+tick)%800,180+(i*23)%60,30,2);R_('#555',0,150,800,8);for(let i=0;i<5;i++)R_('#444',i*190+20,150,14,100)}
+else if(s=='ment'){R_('#59606a',140,90,520,160);R_('#1f3f8f',300,110,200,40);T('МИЛИЦИЯ',400,140,'#fff','bold 24px monospace','center');for(let i=0;i<5;i++){R_('#223',170+i*100,170,50,50);X.strokeStyle='#999';for(let j=0;j<4;j++){X.beginPath();X.moveTo(176+i*100+j*12,170);X.lineTo(176+i*100+j*12,220);X.stroke()}}R_(tick%40<20?'#3a7aff':'#223',620,100,14,14)}}
+function ground(){X.fillStyle='#4a4a4c';X.fillRect(0,250,800,70);X.fillStyle='#38383a';X.fillRect(0,250,800,6);X.fillStyle='#303034';X.fillRect(0,320,800,180);X.fillStyle='#6a6a6c';X.fillRect(0,318,800,4);
+X.fillStyle='rgba(217,217,160,.6)';for(let i=0;i<8;i++)X.fillRect(i*110+10,470,60,4);X.fillStyle='rgba(0,0,0,.18)';for(let i=0;i<30;i++)X.fillRect((i*131)%780,256+(i*47)%60,22,2);const fg=X.createLinearGradient(0,225,0,285);fg.addColorStop(0,'rgba(190,200,220,0)');fg.addColorStop(.5,'rgba(190,200,220,.16)');fg.addColorStop(1,'rgba(190,200,220,0)');X.fillStyle=fg;X.fillRect(0,225,800,60);X.fillStyle='#202022';X.beginPath();X.ellipse(250,420,16,6,0,0,7);X.fill();if(rainy()){X.fillStyle='rgba(120,150,190,.25)';for(let j=0;j<4;j++){X.beginPath();X.ellipse(120+j*190,340+(j%2)*60,40,8,0,0,7);X.fill()}}}
+function props(){const h=hs(loc+SEG),K=['lamp','bench','bin','tree','kiosk','fence','lamp'],g=L[loc][1];
+if(g&&SEG==1){X.fillStyle='#2a2a2a';X.fillRect(30,235,120,22);X.fillStyle=G[g][1];X.font='bold 28px monospace';X.textAlign='center';X.fillText(G[g][0][0]+'!',90,255)}
+for(let i=0;i<5;i++){const x=170+rr(h,i)*560,y=300,k=K[Math.floor(rr(h,i+9)*K.length)];
+if(k=='lamp'){X.fillStyle='#222';X.fillRect(x-2,y-62,4,62);X.fillRect(x-10,y-66,20,5);glows.push({x:x+SEG*800,y:y-60})}
+else if(k=='bench'){X.fillStyle='#6b4a2a';X.fillRect(x-20,y-14,40,5);X.fillRect(x-20,y-24,40,4);X.fillStyle='#222';X.fillRect(x-18,y-9,4,9);X.fillRect(x+14,y-9,4,9)}
+else if(k=='bin'){X.fillStyle='#3a4a3a';X.fillRect(x-8,y-18,16,18);X.fillStyle='#222';X.fillRect(x-10,y-20,20,3)}
+else if(k=='tree'){X.fillStyle='#3a2a1a';X.fillRect(x-3,y-30,6,30);X.fillStyle='#2a5a2a';X.beginPath();X.arc(x,y-40,20,0,7);X.fill()}
+else if(k=='kiosk'){X.fillStyle='#2a5a8a';X.fillRect(x-26,y-44,52,44);X.fillStyle='#c33';X.fillRect(x-30,y-50,60,8);X.fillStyle=tod()>=2?'#ffd45a':'#9ab';X.fillRect(x-18,y-34,36,16);T('ПИВО',x,y-6,'#fff','9px monospace','center')}
+else{X.fillStyle='#5a4a3a';for(let j=0;j<4;j++)X.fillRect(x-24+j*14,y-26,5,26);X.fillRect(x-24,y-20,54,3)}}
+const cx=120+rr(h,20)*460;X.fillStyle=['#8a2a2a','#2a4a7a','#c8c08a'][Math.floor(rr(h,21)*3)];X.fillRect(cx,372,90,26);X.fillRect(cx+16,356,56,18);X.fillStyle='#9bd';X.fillRect(cx+20,359,22,12);X.fillRect(cx+46,359,22,12);X.fillStyle='#111';X.beginPath();X.arc(cx+20,399,8,0,7);X.arc(cx+70,399,8,0,7);X.fill();T('ВАЗ',cx+45,390,'#eee','9px monospace','center')}
+function inside(g){const c=g?G[g][1]:'#8a7a6a',t=tod();X.fillStyle='#1b1b1e';X.fillRect(0,44,800,456);X.fillStyle=c+'30';X.fillRect(0,44,800,230);X.fillStyle='rgba(0,0,0,.2)';for(let i=0;i<40;i++)X.fillRect(i*20,44,2,230);
+X.fillStyle='#3a2c22';X.fillRect(0,274,800,226);X.fillStyle='rgba(0,0,0,.3)';for(let i=0;i<12;i++)X.fillRect(0,274+i*20,800,1);X.fillStyle='#222';X.fillRect(0,268,800,8);
+const wg=X.createLinearGradient(0,90,0,190);wg.addColorStop(0,SK[t][0]);wg.addColorStop(1,SK[t][1]);X.fillStyle=wg;X.fillRect(70,90,120,100);X.fillStyle='#222';X.fillRect(126,90,8,100);X.fillRect(70,136,120,6);
+X.fillStyle='#e8e0c0';X.fillRect(600,80,60,80);T('1988',630,110,'#a22','bold 14px monospace','center');T('ЯНВ',630,130,'#222','11px monospace','center');
+if(g&&SEG==0){X.fillStyle=c;X.fillRect(300,70,200,60);T(G[g][0],400,108,'#fff','bold 18px monospace','center');X.fillStyle='#333';X.fillRect(300,64,200,6)}
+X.fillStyle='#6a4a2a';X.fillRect(300,330,200,50);X.fillStyle='#4a3018';X.fillRect(310,380,10,30);X.fillRect(480,380,10,30);X.fillStyle='#ddd';X.fillRect(330,338,16,10);X.fillStyle='#a33';X.fillRect(380,340,8,12);
+const bx=(x,y,w,hh,cc)=>{X.fillStyle=cc;X.fillRect(x,y,w,hh)};
+if(loc=='flat'){bx(540,300,120,50,'#445a7a');bx(540,290,30,60,'#889');bx(60,300,90,70,'#5a4a3a');bx(700,150,70,60,'#222');bx(704,154,62,52,tick%50<25?'#6a8':'#486');T('ТВ',735,185,'#000','10px monospace','center');bx(300,330,200,50,'#6a4a2a')}
+else switch(g){case 'go':bx(40,230,120,10,'#444');bx(50,240,10,50,'#333');bx(140,240,10,50,'#333');bx(660,300,90,16,'#555');bx(650,316,12,30,'#333');bx(740,316,12,30,'#333');break;
+case 'do':bx(660,170,30,100,'#a33');bx(670,150,10,22,'#222');bx(60,330,140,60,'#2a4a6a');break;
+case 'ce':bx(40,160,100,110,'#5a3a1a');for(let i=0;i<9;i++)bx(46+(i%3)*32,168+Math.floor(i/3)*34,26,28,['#a33','#36a','#6a3'][i%3]);bx(620,320,100,60,'#6a4a2a');for(let i=0;i<4;i++)for(let j=0;j<4;j++)bx(626+i*24,326+j*14,12,12,(i+j)%2?'#ddd':'#222');break;
+case 'mi':bx(60,310,120,50,'#a33');bx(640,250,80,24,'#222');bx(650,254,20,16,'#555');bx(690,254,20,16,'#555');break;
+case 'ki':bx(40,300,150,40,'#555');bx(50,260,40,40,'#a63');bx(700,230,60,90,'#2a3a4a');break;
+case 'zh':bx(560,300,200,40,'#8a6a3a');for(let i=0;i<5;i++)bx(570+i*36,280,28,20,'#c93');bx(40,300,70,70,'#6a4a2a');break;
+case 'sl':bx(40,250,120,24,'#2a7a5a');bx(80,230,30,40,'#bba');bx(620,300,140,60,'#8a2a4a');break;
+case 'tp':bx(60,300,140,70,'#2a6a3a');bx(660,240,60,40,'#555');bx(670,250,40,10,'#c40');break}}
+const Ent=()=>0;
+function scene(){const g=L[loc][1],t=tod();
+if(sc){inside(g)}else{sky();bgStyle();ground();props()}
+const E=ents(),pl=S=='play';
+if(pl)for(const e of E)btns.push({x:e.x-24,y:e.y-(e.spr?44:e.door==1?120:30),w:48,h:e.spr?64:e.door==1?130:40,f:()=>{tgt={x:e.x,y:e.y+(e.spr?30:-5),e,f:e.f};if(e.door)tgt.y=e.y-4}});
+for(const e of E){if(e.door==1){X.fillStyle='#232328';X.fillRect(e.x-90,e.y-125,180,130);X.fillStyle=G[g][1];X.fillRect(e.x-90,e.y-125,180,14);X.fillStyle='#111';X.fillRect(e.x-24,e.y-60,48,64);X.fillStyle=t>=2?'#ffd45a':'#445';X.fillRect(e.x-70,e.y-100,28,30);X.fillRect(e.x+42,e.y-100,28,30);T(G[g][0],e.x,e.y-70,G[g][1],'bold 13px monospace','center')}
+else if(e.door==5){X.fillStyle='#667';for(let i=0;i<6;i++)X.fillRect(e.x-36+i*6,e.y-60+i*10,72-i*12,8);X.fillStyle='#333';X.fillRect(e.x+30,e.y-70,4,90);T(e.n.slice(0,9),e.x,e.y+30,'#245','10px monospace','center')}else if(e.door==2){X.fillStyle=CL.neon+'55';X.fillRect(e.x-50,e.y-4,100,12);T(e.n.split(' ')[0],e.x,e.y+22,CL.neon,'11px monospace','center')}
+else if(e.pick){X.fillStyle=tick%30<15?'#ffe060':'#c9a020';X.beginPath();X.arc(e.x,e.y,5,0,7);X.fill()}
+else if(e.box){}}
+const sp=E.filter(e=>e.spr).concat([{x:px,y:py,me:1}]).sort((a,b)=>a.y-b.y);
+for(const e of sp)e.me?man(px,py,fl.jacket?'#6b4423':'#5a6a7a','#2a1a10',moving,1):(e.kid?(X.save(),X.translate(e.x,e.y),X.scale(.78,.78),man(0,0,e.c,e.hc,e.mv,0),X.restore()):man(e.x,e.y,e.c,e.hc||'#222',e.mv,0));
+if(!sc){if(t==3){X.fillStyle='rgba(0,0,40,.45)';X.fillRect(0,44,800,456)}else if(t==2){X.fillStyle='rgba(60,20,0,.2)';X.fillRect(0,44,800,456)}else if(t==0){X.fillStyle='rgba(255,210,160,.06)';X.fillRect(0,44,800,456)}
+if(t>=2){X.globalCompositeOperation='lighter';for(const q of glows){const rg=X.createRadialGradient(q.x,q.y,2,q.x,q.y,70);rg.addColorStop(0,'rgba(255,200,100,.4)');rg.addColorStop(1,'rgba(255,200,100,0)');X.fillStyle=rg;X.fillRect(q.x-70,q.y-70,140,140)}X.globalCompositeOperation='source-over'}
+if((Math.floor(step/3)+(P.w||0))%4==1&&opt.rain){X.fillStyle='rgba(230,240,255,.15)';X.fillRect(0,250,800,250);X.fillStyle='rgba(255,255,255,.85)';for(let i=0;i<80;i++){const q=(i*61+tick*(.6+i%3*.4))%820,w2=(i*89+tick*(1+i%4*.5))%460+44;X.fillRect(q+Math.sin(tick/30+i)*6,w2,2,2)}}if(rainy()){X.strokeStyle='rgba(160,190,220,.5)';X.lineWidth=1;X.beginPath();for(let i=0;i<70;i++){const x=(i*53+tick*2)%820,y=(i*97+tick*14)%460+44;X.moveTo(x,y);X.lineTo(x-3,y+12)}X.stroke()}}
+else if(loc!='flat'||t==3){X.fillStyle='rgba(0,0,20,.15)';X.fillRect(0,44,800,456)}
+if(pl){let b=near(),hv=null;for(const e of E){if(mx>e.x-24&&mx<e.x+24&&my>e.y-(e.spr?44:e.door==1?120:30)&&my<e.y+(e.spr?20:20))hv=e}const l=hv||b;if(l){X.font='12px monospace';const w=X.measureText(l.n).width+16;X.fillStyle='rgba(0,0,0,.8)';X.fillRect(l.x-w/2,l.y-(l.spr?62:l.door==1?136:48),w,18);T((l==b?'[E] ':'')+l.n,l.x,l.y-(l.spr?49:l.door==1?123:35),CL.neon,'12px monospace','center')}}}
+function hud(){X.fillStyle='rgba(13,13,13,.96)';X.fillRect(0,0,800,44);X.fillStyle=G[P.g][1];X.fillRect(0,0,6,44);
+T(P.n,14,17,'#fff','bold 14px monospace');T(G[P.g][0],14,35,G[P.g][1],'11px monospace');bar(130,6,120,12,P.h/100,'#c22','♥ '+P.h);T('₽ '+P.m,130,37,'#da4','13px monospace');
+bar(270,6,120,12,(auth()+100)/200,CL.neon,'Авторитет '+auth());T(['☀ Утро','☀ День','☾ Вечер','☾ Ночь'][tod()]+(rainy()?' ☂ дождь':''),270,37,'#9ab','12px monospace');
+T('Акт '+act()+' · день '+(Math.floor(step/3)+1)+(P.rot?'  Гниль '+P.rot:''),410,17,P.rot>=40?'#e55':CL.gr,'12px monospace');T(L[loc][0]+(sc&&L[loc][1]?' · штаб':''),410,35,'#fff','12px monospace');
+btn(640,8,66,28,'Карта',()=>S='map');btn(712,8,80,28,'Персонаж',()=>{S='pause';tab=0});
+X.fillStyle='rgba(0,0,0,.6)';X.fillRect(690,48,104,66);drawMap(692,54,.16,false);
+T('WASD/мышь — ходьба · E — действие · Tab — карта · Esc — меню',400,496,'#777','11px monospace','center')}
+function drawDlg(){X.fillStyle='rgba(0,0,0,.45)';X.fillRect(0,44,800,456);btns.push({x:0,y:44,w:800,h:456,f:skipD});box(10,290,780,200,D.col);
+X.save();X.beginPath();X.rect(20,300,90,180);X.clip();X.fillStyle=D.col+'55';X.fillRect(20,300,90,180);X.translate(65,422);X.scale(2.6,2.6);man(0,0,D.col,'#222',0,0);X.restore();X.strokeStyle=D.col;X.strokeRect(20,300,90,180);
+T(D.name,125,318,D.col,'bold 16px monospace');if(D.disc)T('Это художественный показ механики. В реальности это преступление.',400,284,'#e55','12px monospace','center');const t=D.res||D.text;D.n=Math.min(t.length,D.n+1.4);wrap(t.slice(0,D.n|0),640,125,342,18);
+if(D.n>=t.length){if(D.res||!D.opts.length)btn(660,452,120,28,'Далее [E]',closeD);else{const c=D.opts.length>4?2:1,w=640/c;D.opts.forEach((o,i)=>{btn(125+(i%c)*w,392+Math.floor(i/c)*24,w-4,22,(i+1)+'. '+o[0],()=>pick(i),D.col=='#555'?CL.neon:CL.neon,'12px monospace')})}}else T('▌',765,478,CL.neon)}
+function drawTrav(){X.fillStyle='rgba(0,0,0,.55)';X.fillRect(0,44,800,456);box(150,90,500,340,CL.neon);T('КУДА ИДЁМ?',400,122,CL.neon,'bold 18px monospace','center');
+tr.forEach((k,i)=>{const c=L[k][1]?G[L[k][1]][1]:CL.gr;btn(180,140+i*30,440,26,(i+1)+'. '+L[k][0]+(L[k][1]?'  ['+G[L[k][1]][0]+']':''),()=>go(k),c,'13px monospace')});
+btn(300,394,200,28,'Отмена [Esc]',()=>S='play','#c33')}
+function skyline(){sky();for(let i=0;i<16;i++){const bh=60+(i*37)%90;X.fillStyle='#0a0a12';X.fillRect(i*52,250-bh,48,bh);for(let j=0;j<bh/16;j++)for(let q=0;q<3;q++){X.fillStyle=(i*7+j*3+q+(tick/60|0))%5==0?'#ffd45a':'#14141c';X.fillRect(i*52+6+q*14,250-bh+6+j*16,8,9)}}
+X.fillStyle='#0a0a12';X.fillRect(330,110,40,140);X.fillStyle='#14141c';X.beginPath();X.moveTo(326,110);X.lineTo(350,70);X.lineTo(374,110);X.fill();X.fillStyle='#0a0a12';X.fillRect(0,250,800,250);X.fillStyle='#111';X.fillRect(0,250,800,3)}
+function screens(){X.fillStyle=CL.bg;X.fillRect(0,0,800,500);
+if(S=='disc'){skyline();box(100,130,600,240,CL.red);T('КАЗАНЬ 88: ФЕНОМЕН',400,180,CL.red,'bold 34px monospace','center');
+wrap('Игра — художественный вымысел. Не пропагандирует насилие и криминал. Все персонажи вымышлены, совпадения случайны. Игра о драме выбора и его последствиях.',500,150,235,22);btn(300,320,200,34,'Понятно',()=>S='menu')}
+else if(S=='menu'){skyline();X.shadowColor=CL.red;X.shadowBlur=tick%90<4?4:22;T('КАЗАНЬ 88',400,95,'#d22','bold 62px monospace','center');X.shadowColor=CL.neon;T('ФЕНОМЕН',400,140,CL.neon,'bold 26px monospace','center');X.shadowBlur=0;
+btn(300,290,200,36,'Новая игра',()=>{S='create';sel=null;nameBuf=''});if(LS.g('k88'))btn(300,332,200,36,'Продолжить',load);else btn(300,332,200,36,'Нет сохранения',()=>{},'#555');
+btn(300,374,200,36,'Настройки',()=>{S='set';back='menu'});btn(300,416,200,36,'Управление',()=>{S='help';back='menu'});T('Казань, конец 80-х — начало 90-х',400,480,'#666','12px monospace','center')}
+else if(S=='set'){T('НАСТРОЙКИ',400,80,CL.red,'bold 26px monospace','center');btn(250,130,300,38,'Звук: '+(opt.snd?'вкл':'выкл'),()=>opt.snd=!opt.snd);btn(250,180,300,38,'Эффект ЭЛТ: '+(opt.scan?'вкл':'выкл'),()=>opt.scan=!opt.scan);btn(250,230,300,38,'Дождь: '+(opt.rain?'вкл':'выкл'),()=>opt.rain=!opt.rain);btn(250,330,300,38,'Назад',()=>S=back,CL.gr)}
+else if(S=='help'){T('УПРАВЛЕНИЕ',400,70,CL.red,'bold 26px monospace','center');['WASD / стрелки — ходьба; клик мышью по земле — идти','E или клик по человеку / двери — действие','Цифры 1-9 или клик по варианту — реплика','Tab — карта (клик по району — отправиться)','Esc — меню персонажа, сохранение; J — дневник','Дверь штаба — на улице; ВЫХОД — смена района','У кровати в квартире можно выспаться и сохраниться','Цель: пережить 3 акта и выбрать судьбу на Стрелке'].forEach((s,i)=>T(s,120,130+i*30,CL.gr,'14px monospace'));btn(300,400,200,36,'Назад',()=>S=back,CL.gr)}
+else if(S=='create'){T('СОЗДАНИЕ ПЕРСОНАЖА',400,34,CL.red,'bold 22px monospace','center');box(40,52,300,32);T('Твоё имя (нажми на поле, чтобы ввести):',40,46,'#999','11px monospace');T(nameBuf||'введи имя…',50,74,nameBuf?CL.neon:'#666','16px monospace');btn(350,52,150,32,'Случайное имя',()=>{nameBuf=rndName();if(inp)inp.value=nameBuf});
+let i=0,hov=null;for(const k in G){const x=40+(i%4)*190,y=100+Math.floor(i/4)*110,h=mx>=x&&mx<=x+180&&my>=y&&my<=y+100;if(h)hov=k;const on=sel==k;X.fillStyle=on?G[k][1]+'55':h?G[k][1]+'22':'#111';X.fillRect(x,y,180,100);X.strokeStyle=on||h?G[k][1]:'#444';X.lineWidth=on?4:2;X.strokeRect(x,y,180,100);X.fillStyle=G[k][1];X.fillRect(x,y,180,8);
+T((i+1)+'. '+G[k][0],x+8,y+30,G[k][1],'bold 13px monospace');T(L[G[k][4]][0],x+8,y+52,CL.gr,'11px monospace');T('Лидер: '+G[k][2],x+8,y+72,'#999','11px monospace');const kk=k;btns.push({x,y,w:180,h:100,f:()=>sel=kk});i++}
+const s=sel||hov;box(40,330,720,90,s?G[s][1]:'#444');if(s){T('«'+G[s][3]+'»',55,358,'#ddd','13px monospace');T('Штаб: '+L[G[s][4]][0]+' · '+G[s][2],55,382,G[s][1],'13px monospace');T('Старт в этом районе. Репутация у своих +30.',55,404,'#999','12px monospace')}else T('Выбери группировку (клик или 1-8)',55,365,'#777','14px monospace');
+btn(40,440,150,36,'Назад',()=>S='menu',CL.gr);btn(580,440,180,36,sel?'ВСТУПИТЬ':'Выбери группу',()=>{if(sel)newGame(sel)},sel?CL.neon:'#555')}
+else if(S=='map'){T('КАРТА РАЙОНОВ',400,30,CL.red,'bold 20px monospace','center');let hv=null;drawMap(50,50,1,true);
+for(const k in L){const l=L[k],x=l[3]+50,y=l[4]+50,cn=L[loc][2].includes(k)&&(k!='strelka'||act()>=15);if(mx>x-16&&mx<x+16&&my>y-16&&my<y+16)hv=k;
+if(cn){X.strokeStyle='#fff';X.lineWidth=1;X.strokeRect(x-12,y-12,24,24)}btns.push({x:x-16,y:y-16,w:32,h:32,f:()=>{if(cn)go(k);else toast(k==loc?'Ты здесь':k=='strelka'&&act()<15?'Стрелка пока закрыта':'Отсюда не добраться напрямую')}})}
+let y=60;for(const k in G){T(G[k][0]+': '+R[k],790,y,G[k][1],'12px monospace','right');y+=18}
+box(40,420,720,60,hv&&L[hv][1]?G[L[hv][1]][1]:'#555');if(hv){const l=L[hv];T(l[0]+(l[1]?' — '+G[l[1]][0]+' (реп. '+R[l[1]]+')':''),55,445,'#fff','14px monospace');T(L[loc][2].includes(hv)?'Клик — отправиться':hv==loc?'Ты здесь':'Нет прямой дороги — через вокзал',55,468,CL.neon,'12px monospace')}else T('Наведи на район. Белая рамка — можно идти. Клик по району — отправиться.',55,455,'#777','12px monospace');
+T('рамка: красная — чужие, зелёная — свои, серая — нейтральные',400,410,'#999','11px monospace','center');btn(700,5,90,28,'Закрыть',()=>S='play',CL.gr)}
+else if(S=='pause'){T('ПЕРСОНАЖ',400,34,CL.red,'bold 22px monospace','center');['Статы','Репутация','Вещи','Дневник','Отряд'].forEach((s,i)=>btn(40+i*130,50,120,30,s,()=>tab=i,tab==i?CL.neon:CL.gr));
+btn(684,50,106,30,'Отнош. [R]',()=>S='rel');box(40,92,720,330,'#555');
+if(tab==0){const st=[['Здоровье',P.h,100,'#c22'],['Сила',P.s,10,'#e82'],['Ум',P.i,10,'#48e'],['Харизма',P.c,10,'#e4c'],['Честь',P.hon+5,10,'#da3'],['Сила духа',P.pow+5,10,'#e55'],['Хитрость',P.cun+5,10,'#4c8'],['Гниль',P.rot,100,'#9a2']];st.forEach((s,i)=>{T(s[0],60,126+i*38,CL.gr,'14px monospace');bar(200,112+i*38,300,18,s[1]/s[2],s[3],String(s[1]))});T('Деньги: '+fm(P.m),540,126,'#da4','14px monospace');T('Авторитет: '+auth(),540,156,CL.neon,'16px monospace');T('Группа: '+G[P.g][0],540,186,G[P.g][1],'14px monospace');T('День '+(Math.floor(step/3)+1)+', акт '+act(),540,216,CL.gr,'13px monospace');T('Ранения: '+((P.wd&&P.wd.length)?P.wd.map(w=>WD[w.k][0]+' ('+w.t+' дн.)').join(', '):'нет'),60,414,'#e77','12px monospace');['Чушпан'].concat(RK).forEach((r,i)=>{const cur=fl.in?rk()+1:0;T((i==cur?'▶ ':'  ')+r+' · '+(i?RX[i-1]:0),540,240+i*18,i==cur?CL.neon:i<cur?'#8a8':'#666','12px monospace')})}
+else if(tab==1){let i=0;for(const k in G){const y=118+i*38;T(G[k][0],60,y+14,G[k][1],'13px monospace');X.fillStyle='#000';X.fillRect(260,y,400,18);X.fillStyle=G[k][1];const w=Math.abs(R[k])*2;X.fillRect(R[k]>=0?460:460-w,y,w,18);X.fillStyle='#fff';X.fillRect(459,y-3,2,24);T(String(R[k]),690,y+14,CL.gr,'13px monospace');i++}}
+else if(tab==2){let i=0;for(const k in ITEMS){const x=60+(i%4)*170,y=116+Math.floor(i/4)*100,h=fl[k];X.fillStyle=h?'#223':'#111';X.fillRect(x,y,150,80);X.strokeStyle=h?CL.neon:'#333';X.strokeRect(x,y,150,80);T(ITEMS[k],x+75,y+46,h?CL.neon:'#444','14px monospace','center');T(h?'есть':'нет',x+75,y+66,h?'#8c8':'#555','11px monospace','center');i++}T('Деньги: '+fm(P.m),60,414,'#da4','16px monospace')}
+else if(tab==3){const L2=dr.slice(Math.max(0,dr.length-13-ds),dr.length-ds);L2.forEach((t,i)=>T(t.slice(0,92),56,116+i*23,CL.gr,'13px monospace'));btn(700,100,50,28,'▲',()=>ds=Math.min(ds+3,Math.max(0,dr.length-13)));btn(700,134,50,28,'▼',()=>ds=Math.max(0,ds-3))}else drawSquad()
+btn(40,436,150,34,'Продолжить',()=>S='play');btn(200,436,150,34,'Сохранить',save);btn(360,436,150,34,'В меню',()=>S='menu',CL.gr);btn(520,436,70,34,'Звук',()=>opt.snd=!opt.snd,opt.snd?CL.neon:'#666','12px monospace');btn(596,436,70,34,'ЭЛТ',()=>opt.scan=!opt.scan,opt.scan?CL.neon:'#666','12px monospace');btn(672,436,88,34,'Дождь',()=>opt.rain=!opt.rain,opt.rain?CL.neon:'#666','12px monospace')}
+else if(S=='rel')drawRel();else if(S=='cut')drawCut();else if(S=='end'){const e=END[ES];skyline();X.fillStyle='rgba(0,0,0,.75)';X.fillRect(0,0,800,500);T('КОНЦОВКА',400,100,'#777',FT,'center');X.shadowColor=CL.red;X.shadowBlur=18;T(e[0],400,170,'#d22','bold 44px monospace','center');X.shadowBlur=0;wrap(e[1],560,120,230,22);
+T(P.n+' · авторитет '+auth()+' · дней: '+(Math.floor(step/3)+1)+' · деньги: '+fm(P.m),400,360,CL.neon,FT,'center');btn(300,410,200,36,'В главное меню',()=>S='menu')}}
+function post(){if(opt.scan){X.fillStyle='rgba(0,0,0,.16)';for(let y=0;y<500;y+=3)X.fillRect(0,y,800,1)}const v=X.createRadialGradient(400,250,200,400,250,520);v.addColorStop(0,'rgba(0,0,0,0)');v.addColorStop(1,'rgba(0,0,0,.5)');X.fillStyle=v;X.fillRect(0,0,800,500)}
+// ===== НОВЫЕ СИСТЕМЫ: отношения, чужие районы, гниль, драка =====
+let F=null,pf=null,pw='',pl=0,prv='dvor',nq=null,rsel=null;
+const AL=['tp:ki','do:go','ce:sl','zh:ce','zh:sl','mi:go'],WR=['tp:mi','tp:go','do:ki','ki:ce','mi:zh','do:sl'];
+const rel=(a,b)=>a==b?2:AL.includes(a+':'+b)||AL.includes(b+':'+a)?1:WR.includes(a+':'+b)||WR.includes(b+':'+a)?-1:0;
+const PN={tp:'Сила, старшинство, кодекс двора',do:'Дисциплина, спорт, свой интерес',ce:'Связи и ум дороже кулаков',mi:'Молодость, напор, «всё сразу»',go:'Сила, режим, качалка',ki:'Своих бригада не бросает',zh:'Тишина и коммерция, без шума',sl:'Старшие, традиции, уважение'};
+const stat=r=>r<-30?['Враг','#d33']:r<30?['Нейтрал','#999']:r<70?['Свой','#4c4']:['Братан','#3f9'];
+function lastEv(k){for(let i=dr.length-1;i>=0;i--)if(dr[i].includes(G[k][0])||dr[i].includes(G[k][2]))return dr[i];return 'пока ничего'}
+function border(o){const r=R[o],ld=G[o][2],cc=G[o][1];P.enc[o]=(P.enc[o]||0)+1;P.vis[o]=(P.vis[o]||0)+1;if(!(fl.ksiva&&r>-30)&&rnd()<Math.max(0,(r<-60?.12:r<-30?.06:r<30?.025:0)-Math.min(P.sq.length,5)*.012)){deathScene(o);return 1}
+if(P.vis[o]>=3&&r<30&&!fl.watch){fl.watch=1;log('За мной стали следить: слишком часто в районе «'+G[o][0]+'»')}
+if(r>30){dlg(ld,cc,'Смотри, пацан, недолго. Мы запомнили.',[['Понял','','']]);return 1}
+if(r<-30){if(fl.ksiva||fl.spravka||P.c>=8){dlg(ld,cc,'Ты?.. А, с бумагами. Ладно, проходи. Недолго.',[['Пройти','','']]);return 1}
+dlg(ld,cc,'Ты тут?! Взять его!',[['Приготовиться к драке','fight2h','Тебя окружают.']]);return 1}
+ask(o,0);return 1}
+function ask(o,i){const ST=[['Ты чей, пацан?',[['Представиться честно',()=>rel(P.g,o)<0?0:1,'hon+1'],['Соврать',()=>(P.cun>=2||rnd()<.4)?1:0,'cun+1'],['Дерзить',()=>P.pow>=3?1:0,'pow+1'],['Уйти',2,'']]],
+['Зачем пришёл?',[['Договориться по делу',()=>(P.cun+P.i>=6||rnd()<.5)?1:0,'i+1'],['Просто гуляю',()=>rnd()<.5?1:0,''],['Не твоё дело',0,'pow+1'],['Уйти',2,'']]],
+['Знаешь, чей это район?',[['Знаю — ваш. Уважаю.',1,'hon+1 '+o+'+2'],['Теперь знаю',()=>rnd()<.5?1:0,''],['Мой район',0,''],['Уйти',2,'']]]][i];
+dlg(G[o][2],G[o][1],ST[0],ST[1].map(([lb,c,e])=>{let v;return[lb,()=>{v=typeof c=='function'?c():c;if(v==2){pl=1;return 'm+0'}if(v==1){if(i<2)nq=()=>ask(o,i+1);return e||'m+0'}pf={n:1,h:0};return e+' '+o+'-6'},()=>v==2?'Развернулся и ушёл.':v==1?(i<2?'Хмыкнул: «Допустим».':'«Ладно, гуляй. Но недолго».'):'«Не понял тебя!» — сжимаются кулаки.']}))}
+function kidTalk(p){if(p.d===step)return dlg(p.n,p.c,'(Прячет глаза и молчит.)',[['Уйти','','']]);p.d=step;
+if(P.deb.some(d=>d.n==p.n))dlg(p.n,p.c,'Вот... принёс. Пожалуйста, не говори родителям. (Он дрожит.)',[['Забрать и уйти','m+1 rot+3','Он смотрит в пол. Это страх, а не уважение.'],['Отпустить со счётчика','rel1 rot-6 hon+1','Он не верит, что всё.'],['Уйти','','']]);
+else dlg(p.n,p.c,'Дядя, у меня только на булку... Вы чего?',[['Поставить на счётчик',()=>{P.deb.push({n:p.n,s:1,kid:1});return 'm+1 rot+12 hon-1'},'Он испуганно кивает. Слухи ходят быстро: свои морщатся.'],['Поговорить по-человечески',()=>{if(rnd()<.35){fl.kidally=1;return 'c+1 zh+3 i+1'}return 'c+1 zh+3'},'Он оттаял и рассказал, что творится во дворе.'],['Пройти мимо','','']]);D.disc=1}
+function go(to){prv=loc;step++;enter(to,to=='flat'?1:0);
+let ac=0;if(act()!=P.act){P.act=act();ac=1;log('Акт '+P.act+': '+ACTS[P.act-1]);toast('АКТ '+P.act+': '+ACTS[P.act-1])}
+if(step%3==0){healTick();P.h=Math.min(100,P.h+8)}if(tribute())return;if(step%12==0&&fl.in&&P.lt!==step){P.lt=step;trainEvt();return}if(step%12==6&&P.dc!==step){P.dc=step;discoEvt();return}if(story())return;const o=L[to][1];if(o&&o!=P.g&&border(o))return;
+if(fl.watch&&rnd()<.15){dlg('Милиция',CL.neon,'Облава! Свистки, патруль перекрывает двор.',[['Бежать','h-5 cun+1 rep-2','Ушёл дворами.'],['Драться','fight2h win:pow+1_rep+3','Патруль не ждал.'],['Сдаться','m-30 hon+1','Отпустили за штраф.']]);return}
+if(rnd()<.35&&to!='flat'){const e=EV[Math.floor(rnd()*EV.length)];dlg('Случай',CL.neon,e[0],e[1]);return}S='play';if(!ac)toast(L[to][0])}
+EV.push(
+['Стрелка на пустыре: с той стороны ждут.',[['Идти одному','fight2 win:pow+1_rep+8','Один против двоих — отчаянно.'],['Взять братву','cun+1 fight1 win:rep+5','С братвой проще, но один всё равно вышел.'],['Решить миром','cun+1 hon+1 m-20','Договорились. Дорого, но без крови.']]],
+['Разборка 3 на 3: все смотрят на тебя.',[['Выйти вперёд','fight3 win:rep+10_pow+1','Тяжело, но выстояли.'],['Тянуть время','cun+1 rep-3','Сорвалось. Некоторые косятся.']]],
+['Местные тормозят тебя у выхода: «Чего тут ходил?»',[['Показать справку','cun+1','Бумажку уважают.'],['Огрызнуться','fight2h win:pow+1','Начали толкаться.'],['Откупиться (20р)','m-20','Отпустили.']]],
+['«Предъява»: «Ты чего не поздоровался?»',[['Извиниться','hon+1 rep-2','Проглотил. Зато цел.'],['Ответить жёстко','fight1 win:rep+4_pow+1','Не стерпел.'],['Пошутить','cun+1','Разрядил обстановку.']]],
+['Драка в очереди за сигаретами.',[['Влезть в драку','fight2 win:m+15_pow+1','Выбил себе место.'],['Купить и уйти','m-5 f:smokes','Взял пачку.']]],
+['Ночью в подворотне — засада. Трое.',[['Принять бой','fight3h win:rep+6','Не ждали отпора.'],['Бежать','h-8 cun+1','Оторвался, но потрёпан.'],['Откупиться (40р)','m-40','Отпустили.']]],
+['Толпой на одного: бьют парня.',[['Вмешаться','fight2 win:hon+2_rep+5','Заступился. Запомнят.'],['Пройти мимо','hon-2 rep-3','Прошёл. На душе гадко.']]],
+['Школьник, которого ты знал, «поднялся» и вызывает тебя.',[['Принять (1 на 1)','fight1 win:rep+4_hon-1','Победа без чести.'],['Поговорить по-человечески','c+1 hon+1','Он смутился и ушёл.']]],
+['Конфликт из-за девчонки: к тебе идёт парень из чужого двора.',[['Подраться','fight1 win:c+1_pow+1','Она смотрит издали.'],['Поговорить','cun+1 c+1','Разошлись мирно.'],['Уступить','hon-1 c-1','Неприятно, но цел.']]],
+['«Кто кого?» — спор на 20 рублей один на один.',[['Принять (20р)','m-20 fight1 win:m+50_pow+1','Победитель забирает всё.'],['Отказаться','','']]],
+['Началась драка, и тут облава!',[['Бежать','h-5 cun+1 rep-2','Ушёл дворами.'],['Драться','fight2h win:pow+1_rep+3','Отбился от патруля.'],['Сдаться','m-30 hon+1','Отпустили за штраф.']]],
+['На «вписке» всё перерастает в драку.',[['Втянуться','fight3 win:rep+5_m+15','Рёбра гудят.'],['Уйти','cun+1','Вовремя.'],['Разнять','hon+2 h-10','Получил, но разнял.']]],
+['Ты узнал: предатель из своих сдавал информацию милиции.',[['Разобраться кулаками','fight1 win:hon+1_rep+8','Он признался.'],['Сдать старшим','rep+5 hon-1 f:snitch','Старшие довольны.'],['Простить','hon+2 rep-3','Сомнительное благородство.']]]);
+function drawRel(){T('ОТНОШЕНИЯ',400,30,CL.red,'bold 22px monospace','center');const ks=Object.keys(G);
+ks.forEach((k,i)=>{const y=44+i*40,r=R[k],s=stat(r),w=Math.abs(r)*.65;btns.push({x:30,y,w:440,h:38,f:()=>rsel=k});X.fillStyle=rsel==k?G[k][1]+'33':'#101010';X.fillRect(30,y,440,38);X.strokeStyle=rsel==k?G[k][1]:'#333';X.lineWidth=2;X.strokeRect(30,y,440,38);
+X.fillStyle=G[k][1];X.fillRect(38,y+5,28,28);X.fillStyle='#e0b896';X.fillRect(44,y+10,16,14);X.fillStyle='#111';X.fillRect(47,y+15,3,3);X.fillRect(54,y+15,3,3);T(G[k][0],74,y+16,G[k][1],'bold 12px monospace');T(L[G[k][4]][0],74,y+30,'#888','10px monospace');
+X.fillStyle='#000';X.fillRect(250,y+10,130,16);X.fillStyle=r<-30?'#c22':r<30?'#888':'#2a2';X.fillRect(r>=0?315:315-w,y+10,w,16);X.fillStyle='#fff';X.fillRect(314,y+7,2,22);T(String(r),315,y+23,'#fff','10px monospace','center');T(s[0],392,y+24,s[1],'bold 12px monospace')});
+T('Отношения между группировками',612,56,CL.gr,'12px monospace','center');
+ks.forEach((a,i)=>{X.fillStyle=G[a][1];X.fillRect(524+i*24,64,20,10);X.fillRect(498,80+i*24,20,20);ks.forEach((b,j)=>{const v=rel(a,b);X.fillStyle=v==2?'#222':v==1?'#2a7a2a':v==-1?'#9a2222':'#333';X.fillRect(524+j*24,80+i*24,20,20);if(rsel==a||rsel==b){X.strokeStyle='#fff';X.lineWidth=1;X.strokeRect(524+j*24,80+i*24,20,20)}})});
+T('зелёный — дружат · красный — война · серый — нейтралитет',612,290,'#999','11px monospace','center');
+box(30,370,740,110,rsel?G[rsel][1]:'#555');if(rsel){const k=rsel,en=ks.filter(x=>rel(k,x)==-1).map(x=>G[x][0]).join(', ')||'нет',al=ks.filter(x=>rel(k,x)==1).map(x=>G[x][0]).join(', ')||'нет';
+T(G[k][0]+' — лидер '+G[k][2]+' ('+stat(R[k])[0]+')',45,393,G[k][1],'bold 13px monospace');T('Понятия: '+PN[k],45,414,CL.gr,'12px monospace');T('Враги: '+en+' · Друзья: '+al,45,434,CL.gr,'12px monospace');T('Пересекались: '+(P.enc[k]||0)+' раз · Последнее: '+lastEv(k).slice(0,58),45,454,'#999','12px monospace')}else T('Клик по группировке — краткая справка',45,410,'#777','13px monospace');
+btn(700,5,90,28,'Закрыть',()=>S='play',CL.gr)}
+
+// ===== iPhone / статус / кража / счётчик / 2D-бой =====
+let js=null,touchUI=typeof navigator!='undefined'&&(/iPhone|iPad|iPod|Android/i.test(navigator.userAgent)||navigator.maxTouchPoints>1);
+const hx=c=>c.length==4?'#'+c[1]+c[1]+c[2]+c[2]+c[3]+c[3]:c;
+const RK=['Скорлупа','Пацан','Шестёрка','Свой','Боец','Бригадир','Старший','Авторитет'],RX=[0,15,35,60,90,130,180,250];
+const rk=()=>{let r=0;if(!fl.in)return 0;for(let i=0;i<8;i++)if((P.xp||0)>=RX[i])r=i;return r};
+function rkCheck(){const r=rk();if(P.rk==null)P.rk=0;if(r>P.rk){P.rk=r;toast('Новый статус: «'+RK[r]+'»'+(r==1?' · можно собирать отряд':''));log('Статус повышен: «'+RK[r]+'»')}}
+function rp(x,y,w,h,r){X.beginPath();X.moveTo(x+r,y);X.arcTo(x+w,y,x+w,y+h,r);X.arcTo(x+w,y+h,x,y+h,r);X.arcTo(x,y+h,x,y,r);X.arcTo(x,y,x+w,y,r);X.closePath()}
+function box(x,y,w,h,c){const g=X.createLinearGradient(0,y,0,y+h);g.addColorStop(0,'#1c1c20f5');g.addColorStop(1,'#0a0a0cf5');rp(x,y,w,h,8);X.fillStyle=g;X.fill();X.strokeStyle=c||CL.gr;X.lineWidth=2;X.stroke()}
+function btn(x,y,w,h,label,f,col,fs){btns.push({x,y,w,h,f});const hov=mx>=x&&mx<=x+w&&my>=y&&my<=y+h,c=hx(col||CL.neon),g=X.createLinearGradient(0,y,0,y+h);g.addColorStop(0,hov?c+'88':'#2a2a2e');g.addColorStop(1,hov?c+'33':'#101012');rp(x,y,w,h,7);X.fillStyle=g;X.fill();X.strokeStyle=hov?c:'#666';X.lineWidth=1.5;X.stroke();T(label,x+w/2,y+h/2+5,hov?'#fff':(col||CL.gr),fs||'14px monospace','center');return hov}
+function bar(x,y,w,h,f,c,lb){rp(x,y,w,h,h/2);X.fillStyle='#050505';X.fill();if(f>0){X.save();rp(x,y,w,h,h/2);X.clip();const g=X.createLinearGradient(0,y,0,y+h);g.addColorStop(0,c);g.addColorStop(1,'#000');X.fillStyle=g;X.fillRect(x,y,w*cl(f,0,1),h);X.fillStyle='rgba(255,255,255,.18)';X.fillRect(x,y,w*cl(f,0,1),h/3);X.restore()}rp(x,y,w,h,h/2);X.strokeStyle='#777';X.lineWidth=1;X.stroke();if(lb)T(lb,x+w/2,y+h-2,'#fff','10px monospace','center')}
+function man(x,y,c,hc,mv,me){const b=mv?Math.sin(tick/3)*3:0;X.fillStyle='rgba(0,0,0,.35)';X.beginPath();X.ellipse(x,y+15,14,4.5,0,0,7);X.fill();
+X.fillStyle='#14161a';X.fillRect(x-9,y,8,14+b/2);X.fillRect(x+1,y,8,14-b/2);X.fillStyle=me&&fl.shoes?'#f0f0f0':'#0c0c0c';X.fillRect(x-10,y+12+b/2,10,4);X.fillRect(x,y+12-b/2,10,4);
+X.fillStyle='#000';X.fillRect(x-13,y-25,26,30);X.fillStyle=c;X.fillRect(x-12,y-24,24,28);X.fillStyle='rgba(255,255,255,.15)';X.fillRect(x-12,y-24,24,6);X.fillStyle='rgba(0,0,0,.28)';X.fillRect(x+4,y-24,8,28);
+X.fillStyle='#111';X.fillRect(x-12,y-2,24,3);X.fillStyle='#caa24a';X.fillRect(x-2,y-2,4,3);X.fillStyle='rgba(0,0,0,.4)';X.fillRect(x-1,y-22,2,20);
+X.fillStyle='#000';X.fillRect(x-17,y-24+b,7,18);X.fillRect(x+10,y-24-b,7,18);X.fillStyle=c;X.fillRect(x-16,y-23+b,5,16);X.fillRect(x+11,y-23-b,5,16);
+X.fillStyle='#e6bd9a';X.fillRect(x-16,y-8+b,5,4);X.fillRect(x+11,y-8-b,5,4);
+X.fillStyle='#000';X.fillRect(x-9,y-41,18,18);X.fillStyle='#e6bd9a';X.fillRect(x-8,y-40,16,16);X.fillStyle='rgba(0,0,0,.12)';X.fillRect(x+3,y-40,5,16);
+X.fillStyle=hc;X.fillRect(x-9,y-44,18,7);X.fillRect(x-9,y-40,3,6);X.fillStyle='#111';X.fillRect(x-5,y-34,3,2);X.fillRect(x+2,y-34,3,2);X.fillStyle='#c99a78';X.fillRect(x-1,y-32,2,4);X.fillStyle='#8a4a3a';X.fillRect(x-3,y-27,6,1);
+if(me){if(P.wd)for(const w of P.wd){if(w.k=='eye'){X.fillStyle='#6a3a8a';X.fillRect(x-6,y-35,5,4)}if(w.k=='lip'){X.fillStyle='#b22';X.fillRect(x-2,y-27,5,2)}if(w.k=='brow'){X.fillStyle='#a11';X.fillRect(x+1,y-37,5,2)}if(w.k=='nose'){X.fillStyle='#fff';X.fillRect(x-2,y-32,4,5)}if(w.k=='tooth'){X.fillStyle='#000';X.fillRect(x-1,y-26,2,2)}}X.fillStyle=G[P.g][1];X.fillRect(x-10,y-47,20,4);X.fillRect(x-11,y-44,22,2);X.fillRect(x+11,y-16-b,5,4);if(fl.kastet){X.fillStyle='#bbb';X.fillRect(x+11,y-6-b,6,3)}}}
+const wxl=()=>{const w=(Math.floor(step/3)+(P.w||0))%4;return !opt.rain?'':w==3?' ☂':w==1?' ❄':''};
+function hud(){const g=X.createLinearGradient(0,0,0,44);g.addColorStop(0,'#1c1c20');g.addColorStop(1,'#0a0a0c');X.fillStyle=g;X.fillRect(0,0,800,44);X.fillStyle=G[P.g][1];X.fillRect(0,0,6,44);X.fillStyle='#333';X.fillRect(0,43,800,1);
+T(P.n,14,17,'#fff','bold 14px monospace');T(rn()+' · '+G[P.g][0],14,35,G[P.g][1],'11px monospace');
+bar(160,6,110,13,P.h/100,'#d33','♥ '+P.h);T(fm(P.m),160,38,'#e5b83a','13px monospace');bar(280,6,110,13,(auth()+100)/200,CL.neon,'Авторитет '+auth());T(['☀ Утро','☀ День','☾ Вечер','☾ Ночь'][tod()]+wxl(),280,38,'#9ab','12px monospace');
+const r=rk(),fr=r<7?(P.xp-RX[r])/(RX[r+1]-RX[r]):1;bar(400,6,110,13,fr,'#9c6bff',r<7?'до «'+RK[r+1]+'»':'АВТОРИТЕТ');T('Акт '+act()+' · день '+(Math.floor(step/3)+1)+(P.rot?' Г'+P.rot:''),400,38,P.rot>=40?'#e55':CL.gr,'11px monospace');
+T((sc==3?'ДК Химиков':sc>=4?'Больница №7':sc==2?GYM[P.g].n:L[loc][0]).slice(0,17),522,18,'#fff','11px monospace');T((sc==3?'дискотека':sc>=4?hf+' этаж':sc==2?'качалка':sc&&L[loc][1]?'штаб':'улица')+' · отр. '+P.sq.length,522,36,'#888','11px monospace');
+btn(636,4,70,36,'Карта',()=>S='map');btn(712,4,80,36,'Персонаж',()=>{S='pause';tab=0});
+X.fillStyle='rgba(0,0,0,.6)';rp(688,48,108,68,6);X.fill();drawMap(692,54,.16,false);
+if(!touchUI)T('WASD/мышь — ходьба · E — действие · Tab — карта · R — отношения · Esc — меню',400,496,'#777','11px monospace','center')}
+function drawDlg(){const tc=touchUI,bh=tc?30:22,st=tc?32:24,top=tc?200:290,H=490-top;X.fillStyle='rgba(0,0,0,.5)';X.fillRect(0,44,800,456);btns.push({x:0,y:44,w:800,h:456,f:skipD});box(10,top,780,H,D.col);
+X.save();X.beginPath();X.rect(20,top+10,90,tc?110:180);X.clip();X.fillStyle=D.col+'55';X.fillRect(20,top+10,90,H);X.translate(65,top+132);X.scale(2.6,2.6);man(0,0,D.col,'#222',0,0);X.restore();X.strokeStyle=D.col;X.lineWidth=2;X.strokeRect(20,top+10,90,tc?110:180);
+T(D.name,125,top+28,D.col,'bold 16px monospace');if(D.disc)T('Это художественный показ механики. В реальности это преступление.',400,top-6,'#e55','12px monospace','center');
+const t=D.res||D.text;D.n=Math.min(t.length,D.n+1.4);wrap(t.slice(0,D.n|0),640,125,top+52,18);
+if(D.n>=t.length){if(D.res||!D.opts.length)btn(640,490-bh-8,140,bh,'Далее [E]',closeD);else{const c=D.opts.length>4?2:1,w=650/c;D.opts.forEach((o,i)=>{btn(125+(i%c)*w,top+(tc?100:102)+Math.floor(i/c)*st,w-4,bh,(i+1)+'. '+o[0],()=>pick(i),CL.neon,'12px monospace')})}}else T('▌',765,478,CL.neon)}
+function touchCtl(){X.globalAlpha=.55;X.beginPath();X.arc(90,410,48,0,7);X.fillStyle='#222';X.fill();X.strokeStyle='#aaa';X.lineWidth=2;X.stroke();X.beginPath();X.arc(90+(js?cl(js.dx,-1,1)*30:0),410+(js?cl(js.dy,-1,1)*30:0),22,0,7);X.fillStyle='#ccc';X.fill();X.globalAlpha=1;btn(690,376,92,64,'ДЕЙСТВИЕ',()=>{const b=near();if(b)b.f()},CL.neon,'13px monospace')}
+function fit(){let aw=innerWidth,ah=innerHeight;try{const c=getComputedStyle(document.body);aw-=parseFloat(c.paddingLeft)+parseFloat(c.paddingRight);ah-=parseFloat(c.paddingTop)+parseFloat(c.paddingBottom)}catch(e){}const s=Math.min(aw/800,ah/500);cv.style.width=800*s+'px';cv.style.height=500*s+'px'}
+addEventListener('resize',fit);fit();
+function tpos(t){const r=cv.getBoundingClientRect();return[(t.clientX-r.left)*800/r.width,(t.clientY-r.top)*500/r.height]}
+function clickAt(){for(let i=btns.length-1;i>=0;i--){const b=btns[i];if(mx>=b.x&&mx<=b.x+b.w&&my>=b.y&&my<=b.y+b.h){b.f();return}}if(S=='play'&&my>90)tgt={x:mx+cam,y:my}}
+cv.addEventListener('touchstart',e=>{e.preventDefault();touchUI=true;for(const t of e.changedTouches){const[x,y]=tpos(t);if(S=='play'&&!js&&x<190&&y>330){js={id:t.identifier,dx:(x-90)/48,dy:(y-410)/48};tgt=null}else{mx=x;my=y;beep(660);clickAt()}}},{passive:false});
+cv.addEventListener('touchmove',e=>{e.preventDefault();for(const t of e.changedTouches)if(js&&t.identifier==js.id){const[x,y]=tpos(t);js.dx=(x-90)/48;js.dy=(y-410)/48}},{passive:false});
+const tend=e=>{for(const t of e.changedTouches)if(js&&t.identifier==js.id)js=null};cv.addEventListener('touchend',tend);cv.addEventListener('touchcancel',tend);
+document.addEventListener('gesturestart',e=>e.preventDefault());
+// ----- кража, счётчик -----
+function steal(p){if(p.rb){p._r='Он уже прижал карман рукой.';return 'm+0'}p.rb=1;const ch=cl(.35+P.cun*.05+P.c*.02+(tod()==3?.1:0),.2,.85);
+if(rnd()<ch){const m=Math.round((1+rnd()*7)*10)/10;let it='';if(rnd()<.18){const k=['tape','smokes','medkit'][Math.floor(rnd()*3)];fl[k]=1;it=' + '+ITEMS[k]}p._r='Лёгкое движение — и бумажник у тебя. +'+fm(m)+it+'. Он ничего не заметил.';return 'm+'+m+' hon-1 xp+2 rot+1'}
+const r=rnd();if(r<.55){p._r='Он схватил тебя за руку: «Ах ты ж!..»';return 'hon-1 fight1 win:xp+2'}if(r<.8){p._r='Крик! Прибежал участковый: штраф 20 р. Тебя запомнили.';return 'm-20 f:watch hon-1'}p._r='Заметил, но ты успел раствориться в толпе.';return 'cun+1'}
+function squeeze(p){const k=p.n+'@'+loc;if(P.deb.some(d=>d.n==k))return dlg(p.n,p.c,'Он и так платит. Приходи за данью позже.',[['Ладно','','']]);
+dlg(p.n,p.c,'Ты берёшь его за рукав: «Теперь делишься с нами». Сколько просишь (от 1 до 5 р.)?',[1,2,3,4,5].map(s=>{let v;return['Сумма: '+s+' р.',()=>{const rc=cl(.15+s*.09-P.pow*.03-rk()*.03,.1,.85);v=rnd()<rc?0:1;if(!v){pf={n:1,h:0};pw='m+'+s+'_xp+3';return 'rot+4 hon-1'}P.deb.push({n:k,s});return 'm+'+s+' rot+'+(3+s)+' hon-1 xp+3'},()=>v?'Он молча отдал '+s+' р. Теперь будет платить каждый день. Глаза — злые.':'Он не согласен и бьёт первым!']}).concat([['Передумать','','']]))}
+function tribute(){if(!P.deb.length)return 0;if(step%3==0){const m=P.deb.reduce((a,d)=>a+d.s,0);P.m+=m;P.rot=cl(P.rot+P.deb.length,0,100);R[P.g]=cl(R[P.g]-1,-100,100);toast('Дань: +'+fm(m)+'. Старшие морщатся.');log('Получил «дань» '+m+'р')}
+if(P.deb.some(d=>d.kid)&&rnd()<.18){dlg('Мать школьника','#a65','Вы что с моим сыном сделали?! Он боится выходить во двор! Я в милицию пойду!',[['Отпустить его и извиниться','rel1 rot-6 hon+1','Она плачет. Тебе стыдно.'],['Прикрикнуть','rot+8 rep-6 f:watch','Слухи пошли по району. Милиция записала твою кличку.'],['Убежать','cun+1 rot+3','Страх остался у него, а не у тебя.']]);return 1}
+if(rnd()<.1){dlg('Участковый','#4a6fa5','Поступили жалобы, что ты людей трясёшь. Давай-ка пройдёмся.',[['Откупиться (50р)','m-50 f:watch','Участковый спрятал деньги и запомнил тебя.',50],['Отпустить должников','rel1 rot-5 hon+1','Список порвал. Участковый хмыкнул.'],['Уйти дворами','cun+1 f:watch rot+2','Оторвался, но фамилию записали.']]);return 1}return 0}
+// ----- 2D бой от первого лица: бей и уклоняйся -----
+function startFight(o){const ow=L[loc][1],gs=Object.keys(G).filter(k=>k!=P.g);F={hp0:P.h,n:o.n,hmax:120*o.n,fh:120*o.n,hostile:o.h,gang:(ow&&ow!=P.g)?ow:gs[Math.floor(rnd()*gs.length)],win:pw,foes:[],st:100,dodge:0,dt:0,dcd:0,pcd:0,combo:0,ct:0,last:-1,punch:0,side:0,flash:0,shake:0,red:0,ox:0,spots:[],msg:'Пока враг не замахнулся — он в блоке. Бей в замах и после уклона!',skip:0,kast:0,t:0};
+for(let i=0;i<o.n;i++)F.foes.push({s:'idle',t:50+i*45+Math.floor(rnd()*60),dir:0,dg:0});pw='';S='fight'}
+function hitSnd(f){if(!opt.snd)return;try{actx=actx||new AudioContext();const o=actx.createOscillator(),g=actx.createGain(),t=actx.currentTime;o.type='sine';o.frequency.setValueAtTime(f,t);o.frequency.exponentialRampToValueAtTime(30,t+.2);g.gain.setValueAtTime(.25,t);g.gain.exponentialRampToValueAtTime(.001,t+.2);o.connect(g);g.connect(actx.destination);o.start();o.stop(t+.2)}catch(e){}}
+function punch(side){if(!F||F.pcd>0)return;if(F.st<12){F.msg='Выдохся! Подожди.';return}F.st-=12;F.pcd=14;F.punch=1;F.side=side;if(F.last>=0&&F.last!=side&&F.ct>0)F.combo++;else F.combo=0;F.ct=45;F.last=side;
+const tg=F.foes.find(f=>f.s=='windup')||F.foes.find(f=>f.s=='stagger')||F.foes.find(f=>f.s=='idle')||F.foes[0],mu={stagger:2.5,guard:.15,windup:1.5,idle:.15}[tg.s]||1,crit=rnd()<.1+P.cun*.01,d=Math.round((6+P.s*1.5+(F.kast?5:0))*mu*(1+Math.min(P.sq.length,8)*.1)*(1+.25*Math.min(F.combo,4))*(crit?1.7:1));
+F.fh-=d;F.flash=crit?.8:.3;F.shake=crit?10:4;if(tg.s=='windup'){tg.s='stagger';tg.t=45;F.msg='Перебил! −'+d}else F.msg=(crit?'КРИТ! ':(tg.s=='guard'||tg.s=='idle')?'В блок. ':'')+'−'+d+(F.combo>1?' · серия x'+F.combo:'');
+F.spots.push({x:250+Math.random()*300,y:160+Math.random()*120,r:6+Math.random()*12});hitSnd(95);if(F.fh<=0)endFight(1)}
+function dodge(dir){if(!F||F.dcd>0)return;if(F.st<10){F.msg='Нет сил уклоняться!';return}F.st-=10;F.dodge=dir;F.dt=24;F.dcd=34}
+function fightTick(){if(S!='fight'||!F)return;const f=F;f.t++;f.flash*=.9;f.red*=.94;f.punch*=.84;f.st=Math.min(100,f.st+.4);f.pcd--;f.dcd--;if(--f.ct<=0)f.combo=0;if(f.dt>0&&--f.dt==0)f.dodge=0;f.ox+=(-f.dodge*100-f.ox)*.25;
+for(const o of f.foes){if(--o.t>0)continue;
+if(o.s=='idle'){o.s='windup';o.dir=[-1,0,1][Math.floor(rnd()*3)];o.t=cl(Math.round((.62-.06*(f.n-1)-(f.hostile?.06:0))*60),20,38)}
+else if(o.s=='guard'||o.s=='stagger'){o.s='idle';o.t=Math.round((30+rnd()*45)/(1+.2*(f.n-1)))}
+else if(o.s=='windup'){o.s='strike';o.t=12;const ok=f.dodge!=0&&(o.dir==0||f.dodge==-o.dir);
+if(ok){o.dg=1;f.msg='Уклон! Теперь бей!'}else if(f.skip>0){f.skip--;o.dg=1;f.msg='Промахнулся в дыму'}else{o.dg=0;const d=Math.round((18+f.n*6)*(f.hostile?1.4:1)*(1-Math.min(P.sq.length,6)*.07));P.h=Math.max(0,P.h-d);f.red=1;f.shake=10;f.msg='Пропустил удар: −'+d;f.spots.push({x:Math.random()*800,y:Math.random()*400,r:10+Math.random()*25});hitSnd(60);if(P.h<=0){endFight(0);return}}}
+else if(o.s=='strike'){if(o.dg){o.s='stagger';o.t=60}else if(rnd()<.35){o.s='guard';o.t=45}else{o.s='idle';o.t=Math.round((26+rnd()*36)/(1+.2*(f.n-1)))}}}}
+function endFight(w){const g=F.gang,win=F.win,wt=fightWounds();P.enc[g]=(P.enc[g]||0)+1;
+if(w){fx(win.replace(/_/g,' '));const m=3+Math.floor(rnd()*13);P.m+=m;P.xp=(P.xp||0)+6+2*F.n;R[P.g]=cl(R[P.g]+5,-100,100);R[g]=cl(R[g]-5,-100,100);
+for(const k in G)if(k!=g&&k!=P.g){const r=rel(k,g);R[k]=cl(R[k]+(r==1?-2:r==-1?2:0),-100,100)}
+if(rnd()<.3&&L[loc][1]&&L[loc][1]!=P.g)fl.watch=1;log('Выиграл драку ('+F.n+' чел.), +'+m+'р');rkCheck();dlg('Итог','#3c3','Победа! С побеждённых снял '+m+' р. Свои запомнили, чужие — тоже.'+wt,[['Дальше','','']])}
+else{P.m=Math.floor(P.m/2);const it=Object.keys(ITEMS).filter(k=>fl[k]);let lost='',sc2='';if(it.length){const k=it[Math.floor(rnd()*it.length)];delete fl[k];lost=' Потерял: '+ITEMS[k]+'.'}
+P.h=15;if(rnd()<.25){P.scar=1;P.c=Math.max(0,P.c-1);sc2=' На лице шрам (Харизма −1).'}R[P.g]=cl(R[P.g]-3,-100,100);prv='vokzal';pl=1;log('Меня отделали в драке');
+dlg('Итог','#c33','Тебя вынесли за угол. Урок на будущее. Потеряна половина денег.'+lost+sc2+wt,[['Очнуться на вокзале','','']])}if(dcF){dcF=0;pl=0;nq=dcAfter}F=null}
+function flee(){if(!F)return;if(rnd()<.25+P.c*.05+P.h/300){log('Сбежал из драки');F=null;R[P.g]=cl(R[P.g]-2,-100,100);S='play';toast('Сбежал. Репутация −2')}
+else{P.h=Math.max(0,P.h-10);R[P.g]=cl(R[P.g]-4,-100,100);F.msg='Не вышло! Позор: −10 HP, −4 репутации';F.red=1;if(P.h<=0)endFight(0)}}
+function item(n){if(!F)return;if(n==1&&fl.kastet){F.kast=1;F.msg='Кастет: урон выше'}else if(n==2&&fl.smokes){delete fl.smokes;F.skip=1;F.msg='Закурил: следующий удар мимо'}else if(n==3&&fl.medkit){delete fl.medkit;P.h=Math.min(100,P.h+30);F.msg='Аптечка: +30 HP'}else F.msg='Нет такого предмета'}
+function fist(x,y,p,l){const s=1-.3*p;X.save();X.translate(x+(400-x)*p*.5,y-(y-300)*p);X.scale(s,s);X.fillStyle='#000';X.fillRect(-46,-52,92,230);X.fillStyle='#c99a6b';X.fillRect(-34,10,68,160);X.fillStyle='#b9855a';X.fillRect(l?-34:18,10,16,160);X.fillStyle='#d9a977';X.fillRect(-42,-48,84,62);X.fillStyle='#8a5a38';for(let i=1;i<4;i++)X.fillRect(-42+i*21-1,-48,2,26);X.fillRect(l?22:-46,-14,24,34);X.fillStyle='#e8c090';X.fillRect(-38,-44,76,6);X.restore()}
+function foeDraw(o,x,y,k){const bob=Math.sin(tick/8+k)*3;X.save();X.translate(x,y+bob);if(o.s=='stagger')X.rotate(.12);const gc=G[F.gang][1];
+X.fillStyle='#000';X.fillRect(-52,-4,104,210);X.fillStyle='#262632';X.fillRect(-48,0,96,200);X.fillStyle=gc;X.fillRect(-48,0,96,12);X.fillStyle='rgba(255,255,255,.08)';X.fillRect(-48,12,30,188);
+X.fillStyle='#d2a98a';X.beginPath();X.arc(0,-28,30,0,7);X.fill();X.fillStyle='#2a1a10';X.beginPath();X.arc(0,-40,30,Math.PI,0);X.fill();X.fillStyle='#111';X.fillRect(-20,-34,14,4);X.fillRect(6,-34,14,4);X.fillRect(-12,-14,24,4);X.fillStyle='#fff';X.fillRect(-16,-30,6,3);X.fillRect(10,-30,6,3);
+const up=o.s=='windup',gd=o.s=='guard'||o.s=='idle';X.fillStyle=gc;
+if(gd){X.fillRect(-60,-10,28,90);X.fillRect(32,-10,28,90)}else{X.fillRect(-78,up&&o.dir<=0?-70:20,26,90);X.fillRect(52,up&&o.dir>=0?-70:20,26,90)}
+X.fillStyle='#d2a98a';if(gd){X.fillRect(-60,-22,28,16);X.fillRect(32,-22,28,16)}else{X.fillRect(-78,up&&o.dir<=0?-84:100,26,16);X.fillRect(52,up&&o.dir>=0?-84:100,26,16)}X.restore()}
+function drawFight(){const f=F;X.save();if(f.shake>.5)X.translate((Math.random()-.5)*f.shake,(Math.random()-.5)*f.shake);f.shake*=.86;
+const bg=X.createLinearGradient(0,0,0,500);bg.addColorStop(0,'#1a1410');bg.addColorStop(1,'#07060a');X.fillStyle=bg;X.fillRect(-60,-20,920,540);
+X.save();X.translate(f.ox,0);X.fillStyle='#2a2018';for(let y=0;y<300;y+=24)for(let x=-100-((y/24)%2)*30;x<900;x+=60)X.fillRect(x,y,56,20);X.fillStyle='#0c0a09';X.fillRect(-100,300,1000,200);
+for(let i=0;i<10;i++){X.fillStyle='rgba(8,8,10,.8)';X.beginPath();X.arc(20+i*90,250+(i%3)*10,22,0,7);X.fill();X.fillRect(-2+i*90,270+(i%3)*10,44,60)}
+f.foes.forEach((o,i)=>foeDraw(o,400+(i-(f.n-1)/2)*190,225,i));
+for(const s of f.spots){X.fillStyle='rgba(150,0,0,.45)';X.beginPath();X.arc(s.x,s.y,s.r,0,7);X.fill()}X.restore();
+for(const o of f.foes)if(o.s=='strike'){const q=1-o.t/12;X.save();X.globalAlpha=o.dg?.45:1;X.translate(400+o.dir*(170-q*60),380-q*150);X.scale(.8+q*2.2,.8+q*2.2);fist(0,0,0,o.dir<0?0:1);X.restore()}
+const bob=Math.sin(tick/14)*4;fist(260,470+bob,f.side==0?f.punch:0,1);fist(540,470-bob,f.side==1?f.punch:0,0);
+if(f.flash>.05){X.fillStyle='rgba(255,255,255,'+f.flash*.6+')';X.fillRect(-20,-20,840,540)}if(f.red>.05){X.fillStyle='rgba(180,0,0,'+f.red*.5+')';X.fillRect(-20,-20,840,540)}X.restore();
+bar(20,10,300,16,P.h/100,'#c22','Ты ♥ '+P.h);bar(20,30,300,8,f.st/100,'#d6b020');bar(480,10,300,16,Math.max(0,f.fh)/f.hmax,'#d82',G[f.gang][0]+' ×'+f.n);
+const w=f.foes.find(o=>o.s=='windup');if(w){const t=w.dir<0?'⚠ УДАР СЛЕВА → уклон ▶':w.dir>0?'⚠ УДАР СПРАВА → уклон ◀':'⚠ ПРЯМОЙ → уклон в любую сторону';T(t,400,124,'#ff5050','bold 22px monospace','center')}
+T(f.msg,400,150,'#ffd45a','15px monospace','center');if(P.sq.length)T('Отряд ×'+P.sq.length+' помогает',400,194,'#9f9','11px monospace','center');if(f.combo>1)T('СЕРИЯ x'+f.combo+' (чередуй руки!)',400,174,CL.neon,'bold 14px monospace','center');
+btn(20,44,110,24,'1 Кастет',()=>item(1),fl.kastet?CL.neon:'#555','11px monospace');btn(136,44,110,24,'2 Сигареты',()=>item(2),fl.smokes?CL.neon:'#555','11px monospace');btn(252,44,110,24,'3 Аптечка',()=>item(3),fl.medkit?CL.neon:'#555','11px monospace');btn(690,44,90,24,'Бежать',flee,'#c33','11px monospace');
+btn(16,414,104,72,'◀ УКЛОН',()=>dodge(-1),'#4aa3ff','15px monospace');btn(126,414,104,72,'УКЛОН ▶',()=>dodge(1),'#4aa3ff','15px monospace');btn(570,414,104,72,'✊ ЛЕВОЙ',()=>punch(0),'#ff6a3a','15px monospace');btn(680,414,104,72,'ПРАВОЙ ✊',()=>punch(1),'#ff6a3a','15px monospace');
+if(!touchUI)T('A/D — уклон · Q/E — левой/правой · Space — серия · Esc — бежать · 1-3 предметы',400,494,'#777','11px monospace','center')}
+
+// ===== МИР x3, ОТРЯДЫ, МАГАЗИНЫ, ЛЮДИ ПО РАЙОНАМ =====
+let cam=0,SEG=0,trail=[];
+const LS={g:k=>{try{return localStorage.getItem(k)}catch(e){return null}},s:(k,v)=>{try{localStorage.setItem(k,v)}catch(e){}}};
+Object.assign(ITEMS,{jeans:'Джинсы',clock:'Часы',ushanka:'Ушанка',book:'Книга'});
+const WW=()=>sc==3?1600:sc>=2?800:sc?(loc=='flat'?800:1600):2400;
+const NM=['Рашид','Ильнур','Марат','Камиль','Тимур','Ренат','Айрат','Булат','Фанис','Рафик','Азат','Динар','Ленар','Салават','Вадик','Серёга','Колян','Витя','Санёк','Жека','Димон','Паша','Гоша','Лёха','Валера','Игорь','Толик','Эдик','Юра','Радик'];
+const NK=['Кот','Бугор','Лысый','Шило','Малой','Тихий','Горбун','Седой','Нос','Кеша','Рыжий','Гвоздь','Лом','Хмурый','Бык','Шнур','Таракан','Зуб','Гоп','Пират'];
+const RL=[['Я тут недавно, дядь. Говорят, надо слушаться старших.','Скорлупа я пока, мелочь. Но хочу в дело.','Меня ещё никто не знает, но я быстро учусь.'],
+['Я уже не мелочь — на подхвате у старших.','Пацан — это ступенька. Дальше будет интереснее.','Бегаю по поручениям. Зато при деле.'],
+['Я шестерю у бригадира, зато деньги бывают.','Шестёрка — тоже должность. Приходи, когда будет тема.'],
+['Я пацан по понятиям. Слово держу.','С нашими не пропадёшь. Но и наглеть не надо.'],
+['Бойцы мы. Если что — первыми выходим.','В драку — так вместе. Я рядом.'],
+['Бригада у меня. Люди слушаются.','У меня свой участок. Не лезь — и не тронем.'],
+['Я тут давно. Много видел, о многом молчу.','Старший — не звание, а ответственность.']];
+const GF={tp:['У нас на Киндяковке свои порядки.','Теплоконтроль — наш двор, понял?'],do:['Дербышки — это порядок и спорт.','У нас зал, режим и дисциплина.'],ce:['На Баумана всё решают связи.','В Центре людей знают, а не кулаки меряют.'],mi:['В Мирном мы молодые и злые.','Ново-Савиново — район пацанов.'],
+go:['В Горках качалка — святое.','Мы тут железо тягаем, а не языком мелем.'],ki:['Кировский — рабочий район, мы с завода.','У нас бригады, все друг за друга.'],zh:['Жилка — рынок, тут коммерция.','У нас торгуют, а не воюют.'],sl:['Слобода — старый район, старших тут уважают.','У нас традиции, улым.']};
+const MEM={};for(const g in G)[0,0,0,0,0,0,1,1,1,2,2,3,3,4,5,6].forEach((r,i)=>{const id=g+i,h=hs(id);MEM[id]={id,g,r,n:NM[h%NM.length]+' «'+NK[(h>>3)%NK.length]+'»',l:RL[r][h%RL[r].length]+' '+GF[g][(h>>5)%2]}});
+const sqCap=()=>{const r=rk();return r<1?0:r>=7?999:r+1};
+const canTake=m=>m.g==P.g&&!P.sq.includes(m.id)&&P.sq.length<sqCap()&&(rk()>=7||(rk()<=3?m.r==0:m.r<rk()));
+function why(m){if(m.g!=P.g)return 'Он не из твоей группировки.';if(rk()<1)return 'Скорлупа никого не берёт: сначала стань Пацаном.';if(P.sq.length>=sqCap())return 'Отряд полон ('+sqCap()+'). Повысь статус — будет место.';if(rk()<=3&&m.r>0)return 'Пока ты '+RK[rk()]+', в отряд идёт только Скорлупа.';return 'Он выше тебя по статусу и не пойдёт.'}
+function memTalk(m,p){const o=[];
+if(m.g==P.g){if(P.sq.includes(m.id))o.push(['Распустить отряд-человека',()=>{P.sq=P.sq.filter(x=>x!=m.id);return 'm+0'},'Ушёл по своим делам.']);else if(canTake(m))o.push(['Взять в отряд',()=>{P.sq.push(m.id);ppl=ppl.filter(q=>q!=p);return 'rep+1 xp+1'},'«Понял. Иду за тобой».']);else o.push(['Взять в отряд (нельзя)','',why(m)])}
+else if(R[m.g]<-30){return dlg(m.n,G[m.g][1],'Ты тут чего забыл? Проваливай, пока цел!',[['Уйти','',''],['Огрызнуться','fight1h win:pow+1','Он замахивается.']])}
+o.push(['Расспросить: «Как тут дела?»','i+1',RUM[hs(m.id+step)%RUM.length]]);o.push(['Уйти','','']);dlg(m.n+' · '+RK[m.r],G[m.g][1],m.l,o)}
+function mkP(m,x,y){const p={x,y,c:G[m.g][1],hc:['#111','#432','#a52','#ddd'][hs(m.id)%4],n:m.n+' · '+RK[m.r],m,d:0,spr:1,sc:m.r==0?.88:1};p.f=()=>memTalk(m,p);return p}
+function enter(to,s){loc=to;sc=s;const W=WW(),h=hs(to+step),g=L[to][1];px=(s==2||s>=4||(to=='flat'&&s))?400:s?800:300;py=s?425:430;tgt=null;cam=0;ppl=[];pk=[];trail=[];
+if(!s){const n=10+Math.floor(rr(h,1)*5);for(let i=0;i<n;i++){const c=CIV[Math.floor(rr(h,i+30)*CIV.length)],p={x:80+rr(h,i+50)*(W-160),y:330+rr(h,i+70)*110,tx:0,ty:0,c:c[1],hc:['#222','#a52','#ddd','#432'][i%4],n:c[0],t:c[2],ex:c[3],d:0};p.f=()=>talkP(p);p.spr=1;ppl.push(p)}
+if(['dvor','obshaga','savin'].includes(to))for(let i=0;i<2+(h%2);i++){const p={x:100+rr(h,i+300)*(W-200),y:340+rr(h,i+310)*90,c:'#3a8f5a',hc:'#a52',n:'Школьник '+['Петя','Вова','Дима','Ильюша'][(h+i)%4],kid:1,sc:.78,d:0,spr:1};p.f=()=>kidTalk(p);ppl.push(p)}
+const ks=Object.keys(G),gs=g?[g]:[ks[h%8],ks[(h>>3)%8]],cnt=g?9:3;
+gs.forEach((gg,gi)=>{const ms=Object.values(MEM).filter(m=>m.g==gg&&!P.sq.includes(m.id));for(let i=0;i<Math.min(cnt,ms.length);i++){const m=ms[(i*5+h+gi)%ms.length];if(!ppl.some(p=>p.m==m))ppl.push(mkP(m,80+rr(h,i+400+gi*20)*(W-160),330+rr(h,i+420)*110))}});
+for(let i=0;i<3;i++)if(rr(h,i+90)>.62)pk.push({x:50+rr(h,i+100)*(W-100),y:320+rr(h,i+110)*120,v:[.03,.05,.1,.15,.2,.5,1][Math.floor(rr(h,i+120)*7)],n:['монетка','мелочь','пустая бутылка','забытый рубль','медяки','пустая тара'][i%6]})}
+else if(s==3){const ks=Object.keys(G).filter(k=>k!=P.g);for(let i=0;i<14;i++){const p={x:100+rr(h,i+600)*1400,y:320+rr(h,i+610)*110,tx:0,ty:0,c:['#c06a8a','#4a4a8a','#a65b2a','#3a8f5a','#b05a5a'][i%5],hc:['#222','#a52','#ddd','#432'][i%4],n:i%2?'Девчонка':'Парень',t:['«Ласковый май» — кайф!','Тут все свои. Пока не началось...','Потанцуем?','Говорят, сегодня кто-то с Мирного придёт.'][i%4],d:0};p.f=()=>talkP(p);p.spr=1;ppl.push(p)}for(let i=0;i<6;i++){const m=Object.values(MEM).filter(q=>q.g==ks[(i%2)*3%ks.length])[i];if(m)ppl.push(mkP(m,200+i*220,330+(i%3)*30))}}else if(s==4){const L2=hf==1?[['Посетитель','#7a8a5a','Тут очереди как на вокзале.'],['Больной','#aab','Ждёшь врача — ждёшь всю жизнь.']]:[['Сосед Витя','#aab','Ну и тебя отделали... Я с лестницы упал, говорю.'],['Сосед дядя Гена','#aab','Здесь кормят пшёнкой. Привыкнешь.']];L2.forEach((q,i)=>{const p=_np(q[0],q[1],q[2]);p.x=hf==1?260+i*220:480+i*140;p.y=hf==1?380:340;p.tx=0;p.ty=0;ppl.push(p)})}else if(s==2){const ms=Object.values(MEM).filter(m=>m.g==P.g&&m.r<5&&!P.sq.includes(m.id));for(let i=0;i<4;i++){const m=ms[(i*3+h)%ms.length];ppl.push(mkP(m,150+i*160+rr(h,i)*50,330+rr(h,i+7)*80))}}else if(g){const ms=Object.values(MEM).filter(m=>m.g==g&&!P.sq.includes(m.id));for(let i=0;i<Math.min(7,ms.length);i++){const m=ms[(i*3+h)%ms.length];if(!ppl.some(p=>p.m==m))ppl.push(mkP(m,150+rr(h,i+500)*(W-300),320+rr(h,i+510)*100))}}}
+// ----- магазины и ограбления -----
+const fm=v=>{v=Math.round(v*100)/100;const r=Math.floor(v),k=Math.round((v-r)*100);return k?(r?r+' р. '+k+' к.':k+' к.'):r+' р.'};
+const SH={
+vokzal:[{id:'sha',n:'Шаурма «У вокзала»',k:'kiosk',x:800,col:'#d08a2a',kp:'Продавец Эльдар',line:'Свежая шаурма! С лавашом, с луком, с огоньком!',it:[['Шаурма',1.5,'h+14','Горячая, сочная. Сил прибавилось.'],['Чай',0.05,'h+3','Горячий чай в гранёном стакане.'],['Пирожок с картошкой',0.15,'h+6','Тёплый.']],lt:[4,15],gd:1},
+{id:'pre',n:'Киоск «Союзпечать»',k:'kiosk',x:1600,col:'#2a6aa8',kp:'Продавщица Зина',line:'Газеты, открытки, жвачка. Что берём?',it:[['Газета «Вечерняя Казань»',0.05,'i+1','Прочёл про «феномен» и «хулиганов».'],['Жвачка импортная',1,'c+1','Пахнет заграницей.'],['Сигареты «Прима»',0.14,'f:smokes','Без фильтра, зато дёшево.']],lt:[3,10],gd:1}],
+rynok:[{id:'bar',n:'Барахолка Вали',x:500,col:'#a84a2a',kp:'Валя',line:'Фирма, девочки-мальчики! Всё с-за бугра!',it:[['Джинсы «Монтана»',150,'c+3 f:jeans','Фирма! Все обернутся.'],['Кроссовки «Адидас»',90,'c+1 f:shoes','Почти настоящие.'],['Ушанка',25,'c+1 f:ushanka','Зима близко.']],lt:[30,90],gd:2},
+{id:'kom',n:'Комиссионка',x:2050,col:'#6a5a3a',kp:'Старик Моисеич',line:'Вещи с историей. Часы, кассеты, радиолы.',it:[['Часы «Слава»',35,'c+2 f:clock','Хромированные, громко тикают.'],['Кассета с Цоем',6,'c+1 f:tape','Для души.']],lt:[20,70],gd:1}],
+baum:[{id:'tsum',n:'ЦУМ',x:600,col:'#3a5a9a',kp:'Продавщица Нина Петровна',line:'Отдел одежды. Не толкаться!',it:[['Куртка кожаная',200,'c+1 f:jacket','Кожанка — другой разговор.'],['Кроссовки «Скороход»',45,'c+1 f:shoes','Добротные.'],['Джинсы индийские',70,'c+2 f:jeans','Дефицит!']],lt:[60,160],gd:2},
+{id:'kn',n:'Книжный «Дом книги»',x:1900,col:'#7a4a2a',kp:'Библиотекарша Лидия',line:'Тише, молодой человек. Тут читают.',it:[['Книга по истории',1.5,'i+2 f:book','Читаешь — умнеешь.'],['Шахматы',4,'cun+1 f:chess','Развивают хитрость.']],lt:[10,40],gd:1}],
+savin:[{id:'gas',n:'Гастроном',x:650,col:'#4a8a4a',kp:'Продавщица Тамара',line:'Колбаса по талонам, хлеб без талонов.',it:[['Хлеб',0.2,'h+4','Свежий.'],['Колбаса докторская 200 г',0.5,'h+10','Из-под прилавка.'],['Кефир',0.3,'h+5','В стеклянной бутылке.']],lt:[15,60],gd:1}],
+kpp:[{id:'buf',n:'Заводской буфет',x:650,col:'#6a6a8a',kp:'Тётя Роза',line:'Обед рабочий! Суп, чай, булка.',it:[['Суп (первое)',0.3,'h+10','Горячий.'],['Чай с булкой',0.13,'h+5','Сладкая булка.']],lt:[8,30],gd:1}],
+sloboda:[{id:'aby',n:'Лавка Абыя',x:700,col:'#2a8a6a',kp:'Абый Гали',line:'Заходи, улым. Чак-чак свежий, чай горячий.',it:[['Чак-чак',0.6,'h+10','Сладкий, на меду.'],['Баурсаки',0.2,'h+5','Тёплые.'],['Чай с травами',0.05,'h+4','Пахнет мятой.']],lt:[10,35],gd:1}],
+park:[{id:'ice',n:'Ларёк «Мороженое»',k:'kiosk',x:700,col:'#d06a9a',kp:'Мороженщица Галя',line:'Пломбир! Эскимо! Газировка!',it:[['Пломбир',0.2,'h+5','Холодный.'],['Газировка «Буратино»',0.05,'h+3','Сладкая.']],lt:[3,12],gd:1}],
+gym:[{id:'spo',n:'Спорттовары',x:650,col:'#8a3a3a',kp:'Тренер Палыч',line:'Всё для тела. Эспандеры, бинты, железо.',it:[['Бинты и йод',0.6,'f:medkit','Бинт и йод.'],['Эспандер',3.5,'s+1 f:expander','Руки крепче.'],['Кастет «под ключи»',8,'pow+1 f:kastet','Для особых случаев.']],lt:[20,70],gd:2}],
+dvor:[{id:'kol',n:'Продуктовый «Колос»',x:650,col:'#8a8a3a',kp:'Продавщица Клава',line:'Берём, не задерживаем!',it:[['Хлеб',0.2,'h+4','Свежий.'],['Сигареты «Прима»',0.14,'f:smokes','Дешёвые.'],['Пряники',0.25,'h+4','Мятные.']],lt:[10,40],gd:1}]};
+function shopDlg(s){P.rob=P.rob||{};if(P.rob[s.id]!=null&&step-P.rob[s.id]<18)return dlg(s.kp,s.col,'Закрыто. После вчерашнего — ни за что!',[['Уйти','','']]);
+dlg(s.kp,s.col,s.line,s.it.map(i=>[i[0]+' — '+fm(i[1]),'m-'+i[1]+(i[2]?' '+i[2]:''),i[3],i[1]]).concat([['Ограбить (нужен отряд)',()=>rob(s),()=>s._r],['Уйти','','']]))}
+function rob(s){if(P.sq.length<1){s._r='Один ты не потянешь: нужен хотя бы один человек из отряда.';return 'm+0'}
+const ch=cl(.4+P.sq.length*.1+P.pow*.02-s.gd*.12,.15,.85),o=L[loc][1];P.rob[s.id]=step;
+if(rnd()<ch){const m=s.lt[0]+Math.floor(rnd()*(s.lt[1]-s.lt[0]));s._r='Отряд зашёл тихо и вынес кассу и товар. Добыча: '+fm(m)+' Продавец смотрел в пол.';if(rnd()<.4)fl.watch=1;return 'm+'+m+' hon-3 rot+3 xp+4 '+(o?o+'-12':'')}
+s._r='Продавец поднял шум, выскочила охрана!';return 'hon-2 fight'+Math.min(3,s.gd+1)+'h win:m+'+s.lt[0]+'_xp+3'}
+// ----- сущности и сцена (мир в 3 раза шире) -----
+function ents(){const a=[],g=L[loc][1];
+if(sc==3){a.push({x:200,y:300,n:'Диджей Стас',c:'#c8a',hc:'#111',spr:1,f:()=>dlg('Диджей Стас','#c8a','Что поставить? Заказы принимаю за мелочь.',[['«Ласковый май» (0.5 р.)','m-0.5 c+1','Зал взвыл от восторга.',0.5],['«Кино» (0.5 р.)','m-0.5 hon+1','«Группа крови» — зал замер.',0.5],['Медляк (0.5 р.)','m-0.5 c+1','Парами вышли на танец.',0.5],['Уйти','','']])});a.push({x:1100,y:300,n:'Буфетчица',c:'#b05a5a',hc:'#ddd',spr:1,f:()=>dlg('Буфетчица','#b05a5a','Лимонад, бутерброды. Без алкоголя, молодёжь!',[['Лимонад (0.3 р.)','m-0.3 h+3','Шипучий.',0.3],['Бутерброд (0.4 р.)','m-0.4 h+4','С колбасой.',0.4],['Уйти','','']])});for(const p of ppl)a.push(p);a.push({x:800,y:462,n:'Выйти из ДК',door:2,f:()=>{if(dcT>0){dcT=-1;toast('Ушёл до драки')}enter(trl,0)}});return a}
+if(sc>=4){if(hf==2){a.push({x:220,y:350,n:'Твоя койка',f:sleepDlg,box:1});a.push({x:340,y:310,n:'Врач Айрат Ильдарович',c:'#e8e8e8',hc:'#ddd',spr:1,f:doctorDlg});a.push({x:720,y:300,n:'Лестница вниз',door:5,f:()=>{hf=1;enter(loc,4)}})}else{a.push({x:300,y:320,n:'Медсестра Люся',c:'#cfe',hc:'#ddd',spr:1,f:()=>dlg('Медсестра Люся','#cfe','Выписка — после разрешения врача. Что-то нужно?',[['Кефир (0.3 р.)','m-0.3 h+5','Холодный.',0.3],['Булочка (0.1 р.)','m-0.1 h+2','Сладкая.',0.1],['Уйти','','']])});a.push({x:720,y:300,n:'Лестница на 2 этаж',door:5,f:()=>{hf=2;enter(loc,4)}});a.push({x:400,y:462,n:'Выход из больницы',door:2,f:hospExit})}for(const p of ppl)a.push(p);return a}
+if(sc==2){a.push({x:400,y:300,n:P.tn||'Тренер',c:G[P.g][1],hc:'#111',spr:1,f:trainDlg});for(const p of ppl)a.push(p);a.push({x:400,y:462,n:'Выйти из зала',door:2,f:()=>{enter(trl,0)}});return a}
+if(!sc){if(g)a.push({x:1200,y:205,n:'ШТАБ «'+G[g][0]+'»',door:1,f:()=>{enter(loc,1)}});
+for(const s of SH[loc]||[])a.push({x:s.x,y:s.k=='kiosk'?300:205,n:s.n,door:s.k=='kiosk'?4:3,shop:s,f:()=>shopDlg(s)});
+if(SP[loc])a.push({x:g?1800:1200,y:350,n:SN[loc],c:loc=='ment'?'#4a6fa5':'#aaa',hc:'#333',spr:1,f:()=>{const s=SP[loc]();dlg(s[0],s[1],s[2],s[3])}});
+a.push({x:120,y:462,n:'ВЫХОД (в другой район)',door:2,f:openTravel});a.push({x:2280,y:462,n:'ВЫХОД (в другой район)',door:2,f:openTravel})}
+else{if(g)a.push({x:800,y:310,n:G[g][2],c:G[g][1],hc:'#111',spr:1,f:()=>leader(g)});
+if(loc=='flat')a.push({x:580,y:350,n:'Кровать',f:()=>{const s=SP.flat();dlg(s[0],s[1],s[2],s[3])},box:1});
+a.push({x:loc=='flat'?400:800,y:462,n:g?'Выйти на улицу':'ВЫХОД',door:2,f:g?()=>{enter(loc,0);px=1200;py=240}:openTravel})}
+for(const p of ppl)a.push(p);for(const k of pk)a.push({x:k.x,y:k.y,n:k.n+' (+'+fm(k.v)+')',pick:1,f:()=>{P.m+=k.v;pk.splice(pk.indexOf(k),1);toast('Нашёл: '+k.n+' +'+fm(k.v))}});return a}
+function near(){let b=null,bd=80;for(const e of ents()){const q=Math.hypot(e.x-px,(e.y-py)*(e.door?.5:1));if(q<bd){bd=q;b=e}}return b}
+const bx_=e=>e.door==1||e.door==3?[e.x-60,e.y-125,120,135]:e.door==4?[e.x-40,e.y-75,80,85]:e.spr?[e.x-24,e.y-46,48,66]:[e.x-24,e.y-30,48,40];
+function scene(){const g=L[loc][1],t=tod(),W=WW();cam=cl(px-400,0,W-800);glows=[];
+const s0=Math.floor(cam/800),s1=Math.min(W/800-1,Math.floor((cam+799)/800));
+for(let i=s0;i<=s1;i++){X.save();X.translate(i*800-cam,0);X.beginPath();X.rect(0,44,800,456);X.clip();SEG=i;if(sc==3)discoIn();else if(sc>=4)hospIn();else if(sc==2)gymIn();else if(sc)inside(g);else{sky();bgStyle();ground();props()}X.restore()}
+const E=ents(),pl=S=='play';
+if(pl)for(const e of E){const b=bx_(e);if(b[0]-cam>830||b[0]+b[2]-cam<-30)continue;btns.push({x:b[0]-cam,y:b[1],w:b[2],h:b[3],f:()=>{tgt={x:e.x,y:e.y+(e.spr?30:0),e,f:e.f}}})}
+X.save();X.translate(-cam,0);
+for(const e of E){if(e.x-cam<-120||e.x-cam>920)continue;
+if(e.door==1){X.fillStyle='#232328';X.fillRect(e.x-90,e.y-125,180,130);X.fillStyle=G[g][1];X.fillRect(e.x-90,e.y-125,180,14);X.fillStyle='#111';X.fillRect(e.x-24,e.y-60,48,64);X.fillStyle=t>=2?'#ffd45a':'#445';X.fillRect(e.x-70,e.y-100,28,30);X.fillRect(e.x+42,e.y-100,28,30);T(G[g][0],e.x,e.y-70,G[g][1],'bold 13px monospace','center')}
+else if(e.door==3){const s=e.shop;X.fillStyle='#2b2630';X.fillRect(e.x-90,e.y-125,180,130);X.fillStyle=s.col;X.fillRect(e.x-90,e.y-125,180,17);for(let i=0;i<9;i++){X.fillStyle=i%2?'#fff':s.col;X.fillRect(e.x-90+i*20,e.y-108,20,10)}T(s.n.slice(0,24),e.x,e.y-112,'#fff','bold 10px monospace','center');
+X.fillStyle=t>=2?'#ffd45a':'#9cb4c4';X.fillRect(e.x-80,e.y-90,90,60);for(let i=0;i<5;i++){X.fillStyle=['#a33','#36a','#3a3','#da3','#a3a'][i];X.fillRect(e.x-74+i*17,e.y-44,12,12)}X.fillStyle='#111';X.fillRect(e.x+20,e.y-70,40,74);X.fillStyle='#caa24a';X.fillRect(e.x+52,e.y-34,4,4);T('ОТКРЫТО',e.x+40,e.y-76,'#4c4','9px monospace','center')}
+else if(e.door==4){const s=e.shop;X.fillStyle='#000';X.fillRect(e.x-42,e.y-72,84,76);X.fillStyle=s.col;X.fillRect(e.x-40,e.y-70,80,18);for(let i=0;i<4;i++){X.fillStyle='#fff';X.fillRect(e.x-40+i*20+10,e.y-70,10,18)}X.fillStyle=t>=2?'#ffd45a':'#9cb4c4';X.fillRect(e.x-34,e.y-48,68,34);
+if(s.id=='sha'){X.fillStyle='#8a4a2a';X.fillRect(e.x-6,e.y-46,12,28);X.fillStyle='#c86a3a';X.fillRect(e.x-8+Math.sin(tick/8)*2,e.y-40,16,4);X.fillStyle='rgba(255,255,255,.3)';for(let i=0;i<3;i++){X.beginPath();X.arc(e.x-10+i*10,e.y-80-(tick/3+i*9)%22,4,0,7);X.fill()}}
+X.fillStyle='#222';X.fillRect(e.x-40,e.y-14,80,8);T(s.id=='sha'?'ШАУРМА':s.n.slice(7,16).toUpperCase(),e.x,e.y-57,'#fff','bold 10px monospace','center')}
+else if(e.door==5){X.fillStyle='#667';for(let i=0;i<6;i++)X.fillRect(e.x-36+i*6,e.y-60+i*10,72-i*12,8);X.fillStyle='#333';X.fillRect(e.x+30,e.y-70,4,90);T(e.n.slice(0,9),e.x,e.y+30,'#245','10px monospace','center')}else if(e.door==2){X.fillStyle=CL.neon+'55';X.fillRect(e.x-50,e.y-4,100,12);T(e.n.split(' ')[0],e.x,e.y+22,CL.neon,'11px monospace','center')}
+else if(e.pick){X.fillStyle=tick%30<15?'#ffe060':'#c9a020';X.beginPath();X.arc(e.x,e.y,5,0,7);X.fill()}}
+const fol=P.sq.map((id,i)=>{const q=trail[Math.max(0,trail.length-1-14*(i+1))]||{x:px-26*(i+1),y:py};return{x:q.x,y:q.y,c:G[P.g][1],hc:['#111','#432','#a52'][i%3],mv:moving,sc:MEM[id]&&MEM[id].r==0?.88:1}});
+const sp=E.filter(e=>e.spr&&e.x-cam>-60&&e.x-cam<860).concat(fol,[{x:px,y:py,me:1}]).sort((a,b)=>a.y-b.y);
+for(const e of sp)e.me?man(px,py,fl.jacket?'#6b4423':'#5a6a7a','#2a1a10',moving,1):e.sc?(X.save(),X.translate(e.x,e.y),X.scale(e.sc,e.sc),man(0,0,e.c,e.hc,e.mv,0),X.restore()):man(e.x,e.y,e.c,e.hc||'#222',e.mv,0);
+X.restore();
+if(!sc){if(t==3){X.fillStyle='rgba(0,0,40,.45)';X.fillRect(0,44,800,456)}else if(t==2){X.fillStyle='rgba(60,20,0,.2)';X.fillRect(0,44,800,456)}else if(t==0){X.fillStyle='rgba(255,210,160,.06)';X.fillRect(0,44,800,456)}
+if(t>=2){X.globalCompositeOperation='lighter';for(const q of glows){const gx=q.x-cam;if(gx<-80||gx>880)continue;const rg=X.createRadialGradient(gx,q.y,2,gx,q.y,70);rg.addColorStop(0,'rgba(255,200,100,.4)');rg.addColorStop(1,'rgba(255,200,100,0)');X.fillStyle=rg;X.fillRect(gx-70,q.y-70,140,140)}X.globalCompositeOperation='source-over'}
+if((Math.floor(step/3)+(P.w||0))%4==1&&opt.rain){X.fillStyle='rgba(230,240,255,.15)';X.fillRect(0,250,800,250);X.fillStyle='rgba(255,255,255,.85)';for(let i=0;i<80;i++){const q=(i*61+tick*(.6+i%3*.4))%820,w2=(i*89+tick*(1+i%4*.5))%460+44;X.fillRect(q+Math.sin(tick/30+i)*6,w2,2,2)}}
+if(rainy()){X.strokeStyle='rgba(160,190,220,.5)';X.lineWidth=1;X.beginPath();for(let i=0;i<70;i++){const x=(i*53+tick*2)%820,y=(i*97+tick*14)%460+44;X.moveTo(x,y);X.lineTo(x-3,y+12)}X.stroke()}}
+else if(loc!='flat'||t==3){X.fillStyle='rgba(0,0,20,.15)';X.fillRect(0,44,800,456)}
+if(pl){const b=near();let hv=null;for(const e of E){const r=bx_(e);if(mx>r[0]-cam&&mx<r[0]-cam+r[2]&&my>r[1]&&my<r[1]+r[3])hv=e}const l=hv||b;if(l){const r=bx_(l),lx=l.x-cam,ly=r[1]-6;X.font='12px monospace';const w=X.measureText(l.n).width+16;X.fillStyle='rgba(0,0,0,.8)';rp(lx-w/2,ly-14,w,18,5);X.fill();T((l==b?'[E] ':'')+l.n,lx,ly,CL.neon,'12px monospace','center')}}
+if(W>800){const f=cam/(W-800);X.fillStyle='rgba(0,0,0,.5)';X.fillRect(260,490,280,6);X.fillStyle=CL.neon;X.fillRect(260+f*250,490,30,6)}}
+function drawSquad(){const cap=sqCap();T('Отряд: '+P.sq.length+' / '+(cap>=999?'все':cap),60,116,CL.neon,'bold 15px monospace');
+P.sq.forEach((id,i)=>{const m=MEM[id],x=60+(i%2)*350,y=134+Math.floor(i/2)*26;T(m.n.slice(0,22)+' ('+RK[m.r]+')',x,y+16,G[m.g][1],'12px monospace');btn(x+250,y,70,22,'Распустить',()=>{P.sq=P.sq.filter(z=>z!=id)},'#c55','10px monospace')});
+if(!P.sq.length)T(rk()<1?'Ты пока Скорлупа. Стань Пацаном — сможешь собирать младших.':'Подойди к младшему из своей группировки: «Взять в отряд».',60,160,'#999','13px monospace');
+wrap('Правила: Пацан…Свой берут только Скорлупу. Боец и выше — всех, кто ниже статусом. Авторитет собирает всю группировку. Мест +1 за каждый статус (с Пацана — 2).',680,60,392,16,'#888')}
+
+// ===== СЮЖЕТ, РАНЕНИЯ, ТРЕНИРОВКИ, ИМЕНА =====
+let trl='dvor';
+const rndName=()=>NAMES[Math.floor(Math.random()*NAMES.length)]+(Math.random()<.3?' «'+NK[Math.floor(Math.random()*NK.length)]+'»':'');
+END.d=['УБИТ','Тебя нашли утром у подъезда. Двор помолчал и пошёл дальше. Феномен не прощает ошибок, а чужой район — тем более.'];
+const inp=document.getElementById('nm');if(inp)inp.addEventListener('input',()=>{nameBuf=(inp.value||'').slice(0,14)});
+function syncInp(){if(!inp||!inp.style)return;if(S=='create'){const r=cv.getBoundingClientRect(),k=r.width/800;inp.style.display='block';inp.style.left=(r.left+40*k)+'px';inp.style.top=(r.top+52*k)+'px';inp.style.width=300*k+'px';inp.style.height=32*k+'px';inp.style.fontSize=Math.max(16,16*k)+'px';if(inp.value!==nameBuf&&document.activeElement!==inp)inp.value=nameBuf}else if(inp.style.display!='none'){inp.style.display='none';if(inp.blur)inp.blur()}}
+// ----- ранения -----
+const WD={lip:['Разбитая губа',3,1],eye:['Синяк под глазом',4,1],brow:['Рассечённая бровь',5,1],nose:['Сломанный нос',8,2],ribs:['Ушиб рёбер',6,0],tooth:['Выбитый зуб',12,1]};
+function addWound(k){P.wd=P.wd||[];const w=P.wd.find(x=>x.k==k);if(w){w.t=WD[k][1];return}P.wd.push({k,t:WD[k][1]});P.c=Math.max(0,P.c-WD[k][2]);log('Ранение: '+WD[k][0])}
+function healTick(){if(!P.wd)return;for(const w of P.wd.slice()){if(--w.t<=0){P.wd.splice(P.wd.indexOf(w),1);P.c+=WD[w.k][2];log('Зажило: '+WD[w.k][0])}}}
+function fightWounds(){const lost=(F.hp0||P.h)-P.h,out=[];if(lost>=8){const a=['lip','eye','brow'][Math.floor(rnd()*3)];addWound(a);out.push(WD[a][0])}if(lost>=28){const b=['ribs','nose','eye'][Math.floor(rnd()*3)];addWound(b);out.push(WD[b][0])}if(lost>=50&&rnd()<.5){addWound('tooth');out.push(WD.tooth[0])}return out.length?' Ранения: '+out.join(', ')+'.':''}
+// ----- смерть на чужом районе -----
+function deathScene(o){let v;dlg('Тёмный двор','#8b0000','В чужом районе, в тёмной подворотне, выходят трое с арматурой. «Ты чей, чушпан?..» Кто-то заходит сзади.',[
+['Бежать',()=>{v=rnd()<.4+P.c*.03+P.cun*.03;if(!v)pend='d';return v?'h-35 cun+1':'m+0'},()=>v?'Ты вырвался дворами, но рёбра трещат.':'Тебя догнали у гаражей...'],
+['Драться насмерть','fight3h win:pow+2_rep+6','Ты сжимаешь кулаки.'],
+['Просить пощады',()=>{v=rnd()<.5;if(!v)pend='d';return v?'hon-3 rep-15 m-10':'m+0'},()=>v?'Тебя унизили и отпустили. Позор хуже побоев.':'Пощады не было.']])}
+// ----- тренировки -----
+const GYM={tp:{n:'Качалка-бытовка «Подвал»',w:'#33291f',f:'#2a2420'},do:{n:'Зал Дома Обороны',w:'#223347',f:'#1d2a38'},ce:{n:'Секция бокса на Баумана',w:'#40342a',f:'#2c2420'},mi:{n:'Подвал-качалка «Панелька»',w:'#2b2f2b',f:'#1d201d'},go:{n:'«Железный зал» Горки',w:'#2e2a2a',f:'#1c1a1a'},ki:{n:'Заводская секция КПП',w:'#38301f',f:'#262014'},zh:{n:'Бойцовская подсобка Жилки',w:'#2f2a22',f:'#221e18'},sl:{n:'Зал борьбы «Корэш»',w:'#1f3a30',f:'#16261f'}};
+function gymIn(){const g=P.g,y=GYM[g],Q=(c,x,yy,w,h)=>{X.fillStyle=c;X.fillRect(x,yy,w,h)},bb=(x,yy)=>{Q('#bbb',x-60,yy,120,5);Q('#222',x-62,yy-12,10,30);Q('#222',x+52,yy-12,10,30)},bag=(x,c)=>{Q('#555',x,44,3,86);Q(c,x-14,130,32,72);Q('#0006',x+8,130,10,72)};
+Q('#0b0b0d',0,44,800,456);Q(y.w,0,44,800,230);Q(y.f,0,274,800,226);Q('rgba(0,0,0,.3)',0,268,800,8);for(let i=0;i<14;i++)Q('rgba(0,0,0,.18)',i*60,44,2,230);for(let i=0;i<10;i++)Q('rgba(0,0,0,.2)',0,290+i*22,800,1);
+switch(g){
+case 'tp':for(let i=0;i<3;i++)Q('#6a5a4a',0,60+i*10,800,6);Q('#4a3a2a',60,150,130,115);bb(125,190);Q('#444',300,330,130,14);Q('#8a6a3a',620,100,90,70);Q('#222',655,100,4,70);for(let i=0;i<4;i++)Q('#333',470+i*18,300,14,40);break;
+case 'do':for(let i=0;i<10;i++)Q('#a98',40+i*14,90,4,180);Q('#a98',40,90,140,4);bag(400,'#a33');bag(490,'#33a');Q('#2a4a8a',220,360,340,70);Q('#fff',380,380,20,30);Q('#a22',620,100,100,60);T('ДО',670,140,'#fff','bold 26px monospace','center');break;
+case 'ce':Q('#ddd',230,300,340,110);for(let i=0;i<3;i++){Q(i%2?'#fff':'#c33',230,190+i*30,340,4)}Q('#222',226,180,10,130);Q('#222',564,180,10,130);Q('#9bd',40,90,120,110);Q('rgba(255,255,255,.3)',50,100,30,90);Q('#6a4a2a',620,330,120,16);break;
+case 'mi':Q('#7a7a7a',100,170,8,100);Q('#7a7a7a',200,170,8,100);Q('#7a7a7a',100,170,108,8);Q('#111',560,340,70,30);Q('#333',660,300,70,32);Q('#a22',420,100,60,80);T('MIR',450,150,'#fff','bold 16px monospace','center');Q('#5a8a5a',40,110,70,10);Q('#8a5a8a',40,125,50,10);break;
+case 'go':for(let i=0;i<3;i++){Q('#555',70+i*220,150,10,115);Q('#555',200+i*220-60,150,10,115);bb(130+i*220,180)}Q('rgba(150,190,220,.35)',0,70,800,50);Q('#333',640,300,140,40);for(let i=0;i<6;i++)Q('#111',650+i*22,290,16,16);break;
+case 'ki':for(let i=0;i<20;i++)Q(i%2?'#da3':'#222',i*40,262,40,6);for(let i=0;i<8;i++)Q('#222',60+i*32,300,22,22);Q('#444',600,320,100,40);Q('#6a4a2a',300,180,200,50);Q('#aaa',320,170,40,10);break;
+case 'zh':Q('#8a6a3a',80,320,64,52);Q('#7a5a2a',150,340,54,34);Q('#a98',400,44,3,80);Q('#cba',384,124,36,90);Q('#eee',560,100,130,60);T('ЦЕНЫ',625,140,'#222','bold 18px monospace','center');Q('#555',640,330,60,30);break;
+case 'sl':for(let i=0;i<20;i++)Q(i%2?'#2a6a4a':'#e8e0c0',i*40,100,20,10);Q('#16461f',200,350,400,80);X.strokeStyle='#e8e0c0';X.lineWidth=3;X.beginPath();X.ellipse(400,390,120,26,0,0,7);X.stroke();for(let i=0;i<4;i++)Q('#a22',60+i*14,150,10,60);Q('#caa24a',650,300,36,50);break}
+T(y.n,400,70,'#ddd','bold 14px monospace','center')}
+function authority(){const a=[G[P.g][2]].concat(Object.values(MEM).filter(m=>m.g==P.g&&m.r>=5).map(m=>m.n+' ('+RK[m.r]+')'));return a[hs('tr'+step)%a.length]}
+function trainEvt(){const a=authority();P.tn=a;trl=loc;dlg(a,G[P.g][1],'Сегодня тренировка: «'+GYM[P.g].n+'». Проводит '+a+'. Не придёшь — получишь по фанере.',[
+['Пойти на тренировку',()=>{nq=()=>{enter(loc,2)};return 'm+0'},'Ты идёшь в зал...'],
+['Пропустить',()=>{P.h=Math.max(1,Math.floor(P.h/2));addWound('ribs');R[P.g]=cl(R[P.g]-4,-100,100);log('Пропустил тренировку: пробили фанеру');return 'xp+0'},'Тебя поймали после занятия и пробили фанеру. Здоровье упало вдвое.']])}
+function trainDlg(){const c=G[P.g][1];if(P.tdone===step)return dlg(P.tn||'Тренер',c,'На сегодня хватит. Следующая тренировка — через 4 дня.',[['Понял','','']]);P.tdone=step;let v;
+dlg(P.tn||'Тренер',c,'Ну что, '+rn().toLowerCase()+'? Работаем. Что отрабатываем?',[
+['Железо: тяга и жим',()=>{v=rnd()<.6;return v?'s+1 h-10 xp+3 rep+3':'h-6 xp+2 rep+2'},()=>v?'Тяжело, но сил прибавилось.':'Не вышло с весом, зато выдохся честно.'],
+['Груша и спарринг','pow+1 h-8 xp+3 rep+3','Бил до звона в ушах. Тренер кивнул.'],
+['Бег и растяжка',()=>{if(P.wd&&P.wd.length){const w=P.wd.pop();P.c+=WD[w.k][2]}return 'h+10 xp+2 rep+2'},'Дыхание выровнялось, ранения потянуло меньше.'],
+['Слушать наставление','hon+1 i+1 xp+2 rep+2','«Сила без головы — это просто шум».']])}
+// ----- сюжет -----
+const enm=()=>Object.keys(G).find(k=>k!=P.g&&rel(P.g,k)==-1)||Object.keys(G).find(k=>k!=P.g);
+const ld=()=>G[P.g][2],lc=()=>G[P.g][1];
+const STORY=[
+{id:'s1',w:()=>step>=1,who:ld,c:lc,t:()=>'Эй, '+RK[rk()].toLowerCase()+'. Хочешь быть с нами — нужен взнос в общий котёл. Пять рублей.',o:()=>[['Отдать 5 р.','m-5 rep+8 xp+4','Старший кивнул: «Вот это по-людски».',5],['Соврать, что денег нет','cun+1 rep-4','Он прищурился: «Проверим».'],['Отработать — разгрузить машину','h-10 hon+1 xp+3','Спина болит, зато видят, что не прячешься.']]},
+{id:'s2',w:()=>step>=3,who:ld,c:lc,t:()=>'Видишь пацанов из соседнего двора? Это наши вечные враги. Не здоровайся с ними.',o:()=>[['Понял, не здороваюсь','rep+3','Правильно.'],['А почему?','i+1 rep-1','«Много будешь знать — мало проживёшь».'],['Мне всё равно','pow+1','Он усмехнулся: «Дерзкий».']]},
+{id:'s3',w:()=>step>=4,who:()=>'Сашка',c:()=>'#4a8a5a',t:()=>'Ты же с пацанами теперь? Возьми меня к вашим, а? Я не подведу.',o:()=>[['Привести к своим','f:sashka hon+1 xp+2','Он засиял: «Спасибо, брат!»'],['Отказать','hon-1','Он молча ушёл.'],['Сказать: подрасти','cun+1','Он обиделся, но кивнул.']]},
+{id:'s4',w:()=>step>=5,who:ld,c:lc,t:()=>'Наш район и «'+G[enm()][0]+'» не поделили рынок. Назревает война. С кем ты?',o:()=>{const e=enm();return[['Я за своих','rep+6 '+e+'-8 xp+4 f:war','Он хлопнул по плечу: «Свой».'],['Пусть сами разбираются','cun+1 rep-3','Не все поняли такую позицию.'],['Попробовать помирить','i+1 hon+1 '+e+'+4 rep-2','Решительно, но рискованно.']]}},
+{id:'s5',w:()=>step>=6&&fl.sashka,who:()=>'Менты (Сашка)',c:()=>'#4a6fa5',t:()=>'Сашку замели в «Гастрономе» — пытался украсть. Что делаешь?',o:()=>[['Выкупить за 10 р.','m-10 hon+2 xp+2','Сашка тебе должен по гроб.',10],['Пойти и вступиться','hon+1 h-10','Тебя выгнали, но Сашка видел.'],['Сделать вид, что не знаешь','hon-3 f:sashkalost','Он запомнит.']]},
+{id:'s6',w:()=>step>=7,who:ld,c:lc,t:()=>'Среди наших завёлся стукач: менты знают про сходняк. Подозревают троих.',o:()=>{let v;return[['Обвинить Вовчика',()=>{v=rnd()<.5;return v?'rep+6 xp+3':'hon-2 rep-4'},()=>v?'Он оказался виноват. Старшие довольны.':'Обвинил невиновного. Свои косятся.'],['Устроить проверку','i+1 cun+1 xp+3','Ты нашёл ниточки, не горячась.'],['Не лезть','hon+0','Правда, кто-то на тебя смотрит косо.']]}},
+{id:'s7',w:()=>step>=8,who:ld,c:lc,t:()=>'Старшие собрали сходняк. Нужны голоса: война или мир с «'+G[enm()][0]+'»?',o:()=>{const e=enm();return[['За мир','cun+2 hon+1 '+e+'+10 rep-2','Мир дороже, но не все рады.'],['За войну','pow+2 rep+5 '+e+'-12 f:hawk','Кровь горячая, зал рукоплещет.'],['Промолчать','xp+1','Ты запомнил, кто за что голосовал.']]}},
+{id:'s8',w:()=>step>=9,who:()=>'Слухи',c:()=>'#777',t:()=>'Парня из соседнего двора нашли в подвале. Говорят, ваши постарались. Похороны завтра.',o:()=>{const e=enm();return[['Прийти проститься','hon+2 rep-3 '+e+'+5','Тебя запомнили: пришёл, хотя было страшно.'],['Не ходить','cun+1','Лишние взгляды не нужны.'],['Узнать, кто виноват','i+1 cun+1 xp+2','Кое-что выяснил. Знание — тяжёлая ноша.']]}},
+{id:'s9',w:()=>step>=10,who:()=>'Капитан Рамазанов',c:()=>'#4a6fa5',t:()=>'Сдашь старших — закрою глаза на всё. 30 рублей сразу, остальное потом.',o:()=>[['Согласиться','m+30 hon-4 rep-10 f:informer','Подписал. Теперь у тебя два лица.'],['Отказать','hon+2 h-10','Капитан побагровел: «Пожалеешь».'],['Играть на два фронта','cun+2 m+10 f:watch','Рискованно. Но ты видел обе стороны.']]},
+{id:'s10',w:()=>act()>=15,who:ld,c:lc,t:()=>'Через пару дней на Стрелке соберутся все районы. Там решат, кто чей. Готовься.',o:()=>[['Собрать отряд','xp+5 rep+3','Люди готовы идти за тобой.'],['Подготовить деньги на всякий случай','cun+1','Запасы не помешают.'],['Позвонить матери','hon+2 h+10','Она сказала: «Береги себя».'],['Купить билет на всякий случай (20 р.)','m-20 f:ticket','Билет — как запасной выход.',20]]},
+{id:'s11',w:()=>step>=14,who:()=>'Ночь перед Стрелкой',c:()=>'#556',t:()=>'Тебе снится двор. Кто ты — тот, кем был, или тот, кем стал?',o:()=>[['Остаться собой','hon+3','Ты решил: честь — прежде всего.'],['Идти до конца','pow+2 rep+5','Назад пути нет.'],['Сбежать','cun+1 hon-2 f:ticket','Ты запомнил расписание поездов.']]}];
+function story(){P.sd=P.sd||{};for(const b of STORY){if(P.sd[b.id]||!b.w())continue;P.sd[b.id]=1;log('Сюжет: '+b.t().slice(0,40)+'…');dlg(b.who(),b.c(),b.t(),b.o());return 1}return 0}
+EV.push(['Письмо от матери: «Сынок, береги себя. Вернись домой пораньше».',[['Позвонить ей','hon+2 h+5','Она плакала в трубку.'],['Не отвечать','hon-1','Письмо осталось в кармане.']]],
+['На стене свежая надпись против твоей группировки.',[['Замазать','hon+1 rep+3','Свои оценили.'],['Ответить своей надписью','cun+1 pow+1','Война лозунгов.']]],
+['Пожар в подвале: дети кричат.',[['Вытащить детей','hon+3 h-10 xp+3','Обжёгся, но дети живы.'],['Пройти мимо','hon-3','Пожарные приехали без тебя.']]],
+['Парень с гитарой просит защиты от местных.',[['Заступиться','fight1 win:hon+2_c+1','Он перестал дрожать.'],['Пройти мимо','hon-1','Музыка стихла.']]],
+['Участковый спрашивает про последние драки.',[['Всё отрицать','cun+1','Не поверил, но записал.'],['Назвать «виновных»','rep-8 hon-3 m+10 f:snitch','Деньги жгут руки.']]],
+['Ты нашёл кошелёк: 40 рублей и документы.',[['Вернуть хозяину','hon+3','Он плакал от радости.'],['Забрать деньги','m+40 hon-2','Совесть жжёт.'],['Отнести в милицию','hon+1','Там даже спасибо не сказали.']]],
+['Сосед-инвалид просит донести уголь.',[['Помочь','hon+1 h-5','Руки в саже, но на душе легче.'],['Отказать','','']]],
+['Подбросили записку: «Следи за спиной».',[['Искать автора','i+1 cun+1','Не нашёл, но стал осторожнее.'],['Показать старшим','rep+3','Старшие насторожились.'],['Выбросить','','']]]);
+
+// ===== ДИСКОТЕКИ, СТЕНКА НА СТЕНКУ, БОЛЬНИЦА (2 этажа) =====
+let dcT=-1,dcF=0,hf=2,hospMsg='';
+END.b=['ПОГИБ В ДРАКЕ','На дискотеке в ДК Химиков началась массовая драка. Тебя нашли под утро на ступенях. «Ласковый май» уже не играл.'];
+function discoEvt(){dlg('ДК Химиков',CL.neon,'Сегодня в ДК Химиков дискотека: магнитофон, лампы, девчонки. Билет — 1 рубль. Говорят, придут пацаны из соседних районов.',[
+['Пойти на дискотеку (1 р.)',()=>{nq=()=>{trl=loc;enter(loc,3);dcT=rnd()<.5?420:-1;toast('Дискотека в ДК Химиков')};return 'm-1'},'Охранник на входе пропускает, пересчитывая монеты.',1],
+['Остаться дома','h+8','Выспался и отдохнул.']])}
+function brawlEvt(){dcT=-1;let v;dlg('ДК Химиков','#c33','Кто-то крикнул: «Наших бьют!» Зал взорвался. Стенка на стенку — все против всех!',[
+['Влиться в стенку',()=>{dcF=1;pf={n:3,h:true};return 'rep+3 xp+2'},'Ты врезался в самую гущу.'],
+['Бежать к выходу',()=>{v=rnd()<.4+P.c*.03+P.cun*.04;if(v)return 'cun+1 hon-1';dcF=1;pf={n:2,h:true};return 'h-8'},()=>v?'Ты вырвался сквозь толпу. Цел.':'Тебя схватили у выхода — пришлось драться.'],
+['Прятаться в туалете',()=>{v=rnd()<.5;return v?'cun+1 hon-2':'h-15'},()=>v?'Пересидел, но сам себе противен.':'Тебя нашли и отметелили, но не сильно.']])}
+function dcAfter(){if(rnd()<.05){ES='b';S='end';return}if(rnd()<.5){hospital();return}dlg('Дискотека','#c8a','Ты выбрался из свалки: синяки, порванная куртка, но без больницы. Милиция уже едет — пора уходить.',[['Уйти','','']])}
+function discoTick(){if(S=='play'&&sc==3&&dcT>0&&--dcT==0)brawlEvt()}
+function discoIn(){const t=tick,Q=(c,x,y,w,h)=>{X.fillStyle=c;X.fillRect(x,y,w,h)};Q('#07040d',0,44,800,456);Q('#140a22',0,44,800,226);
+for(let i=0;i<20;i++)for(let j=0;j<6;j++){const on=((i+j+(t/20|0))%3==0);Q(on?['#c2185b','#1976d2','#388e3c','#f9a825'][(i+j)%4]:'#1b1226',i*40,274+j*38,40,38)}
+if(SEG==0){Q('#e8e0c0',60,90,70,100);T('ЛАСКОВЫЙ',95,130,'#a22','bold 9px monospace','center');T('МАЙ',95,148,'#a22','bold 13px monospace','center');Q('#222',620,90,70,100);T('КИНО',655,150,'#e5c','bold 13px monospace','center');T('ДК ХИМИКОВ',400,150,'#ffd45a','bold 18px monospace','center');Q('#222',20,210,50,90);Q('#4a3a2a',140,260,160,30);Q('#222',160,244,50,16);Q('#c33',230,246,20,14)}
+if(SEG==1){Q('#6a4a2a',200,250,260,30);T('БУФЕТ',330,243,'#ffd45a','bold 11px monospace','center');for(let i=0;i<5;i++)Q(['#2a8','#a82','#28a','#a28','#8a2'][i],220+i*40,232,12,18);Q('#222',730,210,50,90)}
+X.fillStyle='#ccd';X.beginPath();X.arc(400,100,22,0,7);X.fill();for(let i=0;i<8;i++){const a=t/30+i;X.fillStyle='rgba(255,255,255,.7)';X.fillRect(400+Math.cos(a)*18-1,100+Math.sin(a)*14-1,3,3)}
+X.globalCompositeOperation='lighter';const C=['rgba(255,60,120,.35)','rgba(60,160,255,.35)','rgba(120,255,120,.3)','rgba(255,210,60,.35)','rgba(200,80,255,.3)'];
+for(let i=0;i<5;i++){const a=Math.sin(t/40+i+SEG)*.5+i-2,ex=400+Math.sin(a)*320,gr=X.createLinearGradient(400,100,ex,420);gr.addColorStop(0,C[i]);gr.addColorStop(1,'rgba(0,0,0,0)');X.fillStyle=gr;X.beginPath();X.moveTo(394,100);X.lineTo(406,100);X.lineTo(ex+60,420);X.lineTo(ex-60,420);X.fill()}X.globalCompositeOperation='source-over'}
+function hospIn(){const Q=(c,x,y,w,h)=>{X.fillStyle=c;X.fillRect(x,y,w,h)};Q('#10201a',0,44,800,456);Q('#cfe0d8',0,44,800,230);Q('#6a8a7a',0,170,800,100);Q('#e8f0ec',0,162,800,8);Q('#b9c4c0',0,274,800,226);
+for(let i=0;i<20;i++)for(let j=0;j<6;j++)if((i+j)%2)Q('#a8b4b0',i*40,274+j*38,40,38);for(let i=0;i<4;i++){Q(tick%90<4&&i==1?'#889':'#fff',100+i*190,52,70,6)}
+Q('#9cb4c4',60,90,90,60);Q('#fff',100,90,4,60);Q('#fff',60,118,90,4);if(hf==1){T('ПРИЁМНОЕ',400,100,'#245','bold 22px monospace','center');Q('#8a6a4a',180,300,220,34);Q('#ddd',200,286,40,14);Q('#6a4a2a',520,330,120,14);Q('#6a4a2a',520,360,120,14);Q('#fff',620,100,40,40);X.strokeStyle='#333';X.beginPath();X.arc(640,120,16,0,7);X.stroke();T('Буфет',460,320,'#245','11px monospace','center')}
+else{T('ПАЛАТА №4 · 2 ЭТАЖ',400,100,'#245','bold 20px monospace','center');for(const x of [140,440,580]){Q('#777',x,300,120,8);Q('#777',x,300,6,40);Q('#777',x+114,300,6,40);Q('#eee',x+4,290,26,12);Q('#8aa',x+30,292,86,14)}Q('#888',330,260,6,50);Q('#9bd',324,258,18,10);Q('#6a4a2a',660,170,90,100);T('ОРДИНАТОРСКАЯ',705,160,'#245','9px monospace','center')}
+T(hf==1?'1 этаж':'2 этаж',60,66,'#245','bold 12px monospace')}
+// ----- больница -----
+function hospital(){P.hosp=2;hf=2;enter(loc,4);dlg('Больница №7','#8ab','Ты очнулся в больнице. Над тобой склонился врач: «Два дня постельного режима, молодой человек. И никаких дискотек».',[['Лежать','','']])}
+function hospDay(){step+=3;healTick();P.hosp=Math.max(0,P.hosp-1);P.h=Math.min(100,P.h+35);hospMsg=P.hosp>0?'День прошёл: капельница, уколы, потолок. Остался ещё один день.':'Врач сказал: «Можно выписываться». Спустись на первый этаж.';if(rnd()<.5){hospMsg+=' Заходил кто-то из своих, принёс яблок.';R[P.g]=cl(R[P.g]+2,-100,100)}log('День в больнице. Осталось: '+P.hosp)}
+function sleepDlg(){if(P.hosp<=0)return dlg('Койка','#8ab','Тебя уже выписали. Спускайся на первый этаж.',[['Ладно','','']]);dlg('Койка','#8ab','Больничная койка скрипит, но тёплая. Врач велел отлёживаться. Осталось дней: '+P.hosp+'.',[['Лежать и ждать (1 день)',()=>{hospDay();return 'm+0'},()=>hospMsg],['Встать и пройтись','','']])}
+function doctorDlg(){let v;dlg('Врач Айрат Ильдарович','#e8e8e8','Лежи и не геройствуй. Рёбра целы, но голова была в опасности.',[
+['Спросить, что со мной','i+0',()=>'Ранения: '+((P.wd&&P.wd.length)?P.wd.map(w=>WD[w.k][0]).join(', '):'серьёзных нет')+'.'],
+['Попросить выписать досрочно',()=>{v=P.hosp<=0?0:P.c>=6?1:2;if(v==1){P.hosp=0;return 'h-10 rep-1'}return 'm+0'},()=>v==0?'Ты и так свободен.':v==1?'Хмыкнул: «Под расписку». Выписал, но здоровье не восстановилось.':'«Нельзя. Два дня, не меньше!»'],['Уйти','','']])}
+function hospExit(){if(P.hosp>0)return dlg('Медсестра Люся','#cfe','Куда?! Врач не разрешал. Осталось дней: '+P.hosp+'.',[['Ладно','','']]);toast('Выписан. Береги себя.');enter('vokzal',0)}
+const _np=(n,c,t)=>({n,c,hc:'#444',spr:1,f:()=>dlg(n,c,t,[['Ладно','','']])});
+// ----- патчи сущностей -----
+
+// ===== 15 АКТОВ, ВРЕМЯ (1 день = 3 хода), СОБЫТИЯ С ЛЮДЬМИ =====
+const day=()=>Math.floor(step/3)+1;
+const ACTS=['Свой среди чужих','Взнос','Должник','Чужие районы','Стрелки и понятия','Первое предательство','Крыша','Сходняк','Похороны','Двойная игра','Облава','Раскол','Накануне','Последняя ночь','Разборка на Стрелке'];
+const ST=(id,a,who,c,t,o)=>({id,w:()=>act()>=a,who,c,t,o});
+const _l=()=>ld();
+const STORY2=[
+ST('s1',1,ld,lc,()=>'Эй, '+RK[rk()].toLowerCase()+'. Хочешь быть с нами — нужен взнос в общий котёл. Пять рублей.',()=>[['Отдать 5 р.','m-5 rep+8 xp+4','Старший кивнул: «Вот это по-людски».',5],['Соврать, что денег нет','cun+1 rep-4','Он прищурился: «Проверим».'],['Отработать — разгрузить машину','h-10 hon+1 xp+3','Спина болит, зато видят, что не прячешься.']]),
+ST('s2',1,ld,lc,()=>'Видишь пацанов из соседнего двора? Это наши вечные враги. Не здоровайся с ними.',()=>[['Понял, не здороваюсь','rep+3','Правильно.'],['А почему?','i+1 rep-1','«Много будешь знать — мало проживёшь».'],['Мне всё равно','pow+1','Он усмехнулся: «Дерзкий».']]),
+ST('s3',2,()=>'Сашка',()=>'#4a8a5a',()=>'Ты же с пацанами теперь? Возьми меня к вашим, а? Я не подведу.',()=>[['Привести к своим','f:sashka hon+1 xp+2','Он засиял: «Спасибо, брат!»'],['Отказать','hon-1','Он молча ушёл.'],['Сказать: подрасти','cun+1','Он обиделся, но кивнул.']]),
+ST('s12',3,ld,lc,()=>'Один мужик из дома напротив третий день не платит. Сходи, поговори.',()=>[['Поговорить спокойно','hon+1 cun+1 xp+2','Мужик понял и вернул долг.'],['Припугнуть','pow+1 rot+4 m+3 xp+3 hon-1','Он заплатил, но смотрел с ненавистью.'],['Отказаться','rep-4','Старший хмыкнул: «Не созрел».']]),
+ST('s17',3,()=>'Мать',()=>'#a65',()=>'Сынок, я нашла у тебя в кармане странный железный предмет. Что это?',()=>[['Соврать','cun+1 hon-1','Она сделала вид, что поверила.'],['Признаться','hon+2','Она долго молчала, потом обняла.'],['Уйти из дома на ночь','pow+1 hon-1','Ты проснулся на лавке во дворе.']]),
+ST('s13',4,()=>'Парень с другого района',()=>'#777',()=>'Мы не все враги. Хочешь знать, как у нас тут живут?',()=>{const e=enm();return[['Поговорить','i+1 '+e+'+3','Он оказался вполне нормальным.'],['Послать','pow+1 '+e+'-3 rep+2','Свои одобрили.'],['Сдать своим','rep+4 hon-1','Он узнает, кто настучал.']]}),
+ST('s4',5,ld,lc,()=>'Наш район и «'+G[enm()][0]+'» не поделили рынок. Назревает война. С кем ты?',()=>{const e=enm();return[['Я за своих','rep+6 '+e+'-8 xp+4 f:war','Он хлопнул по плечу: «Свой».'],['Пусть сами разбираются','cun+1 rep-3','Не все поняли такую позицию.'],['Попробовать помирить','i+1 hon+1 '+e+'+4 rep-2','Решительно, но рискованно.']]}),
+ST('s5',6,()=>'Менты (Сашка)',()=>'#4a6fa5',()=>'Сашку замели в «Гастрономе» — пытался украсть. Что делаешь?',()=>fl.sashka?[['Выкупить за 10 р.','m-10 hon+2 xp+2','Сашка тебе должен по гроб.',10],['Пойти и вступиться','hon+1 h-10','Тебя выгнали, но Сашка видел.'],['Сделать вид, что не знаешь','hon-3 f:sashkalost','Он запомнит.']]:[['Пройти мимо','','Не твоё дело.']]),
+ST('s6',6,ld,lc,()=>'Среди наших завёлся стукач: менты знают про сходняк. Подозревают троих.',()=>{let v;return[['Обвинить Вовчика',()=>{v=rnd()<.5;return v?'rep+6 xp+3':'hon-2 rep-4'},()=>v?'Он оказался виноват. Старшие довольны.':'Обвинил невиновного. Свои косятся.'],['Устроить проверку','i+1 cun+1 xp+3','Ты нашёл ниточки, не горячась.'],['Не лезть','hon+0','Кто-то смотрит косо.']]}),
+ST('s14',7,()=>'Коммерс с рынка',()=>'#20b2aa',()=>'Ты парень видный. Приглядишь за моими ларьками? Заплачу.',()=>[['Согласиться','m+8 hon-1 xp+3','Деньги небольшие, но регулярные.'],['Отказаться','hon+1','Он пожал плечами.'],['Потребовать больше','m+15 hon-2 f:watch','Согласился, но запомнил.']]),
+ST('s18',7,()=>'Лена',()=>'#c06a8a',()=>'Привет. Я видела тебя на дискотеке. Ты не такой, как они.',()=>[['Пригласить на прогулку','c+2 i+1','Вечер был тёплым, говорили о жизни.'],['Сказать: «не до тебя»','pow+1 c-1','Она обиженно ушла.'],['Подарить цветок (0.5 р.)','m-0.5 c+1 hon+1','Она улыбнулась.',0.5]]),
+ST('s7',8,ld,lc,()=>'Старшие собрали сходняк. Нужны голоса: война или мир с «'+G[enm()][0]+'»?',()=>{const e=enm();return[['За мир','cun+2 hon+1 '+e+'+10 rep-2','Мир дороже, но не все рады.'],['За войну','pow+2 rep+5 '+e+'-12 f:hawk','Кровь горячая, зал рукоплещет.'],['Промолчать','xp+1','Ты запомнил, кто за что голосовал.']]}),
+ST('s8',9,()=>'Слухи',()=>'#777',()=>'Парня из соседнего двора нашли в подвале. Говорят, ваши постарались. Похороны завтра.',()=>{const e=enm();return[['Прийти проститься','hon+2 rep-3 '+e+'+5','Тебя запомнили: пришёл, хотя было страшно.'],['Не ходить','cun+1','Лишние взгляды не нужны.'],['Узнать, кто виноват','i+1 cun+1 xp+2','Кое-что выяснил. Знание — тяжёлая ноша.']]}),
+ST('s9',10,()=>'Капитан Рамазанов',()=>'#4a6fa5',()=>'Сдашь старших — закрою глаза на всё. 30 рублей сразу, остальное потом.',()=>[['Согласиться','m+30 hon-4 rep-10 f:informer','Подписал. Теперь у тебя два лица.'],['Отказать','hon+2 h-10','Капитан побагровел: «Пожалеешь».'],['Играть на два фронта','cun+2 m+10 f:watch','Рискованно. Но ты видел обе стороны.']]),
+ST('s19',10,ld,lc,()=>'Старший уходит на покой. Хочешь взять его участок?',()=>[['Взять','xp+6 rep+5 pow+1','Теперь на тебе чужие долги и обязанности.'],['Отказаться','hon+1','Он посмотрел с уважением.'],['Предложить другого','cun+1 rep+2','Ты показал, что умеешь делегировать.']]),
+ST('s15',11,()=>'Ночь',()=>'#556',()=>'Ночью облава: свистки, машины, двор окружён.',()=>[['Бежать','h-5 cun+1','Ушёл дворами.'],['Драться','fight2h win:pow+1_rep+5','Патруль не ждал отпора.'],['Сдаться','m-5 hon+1 f:watch','Отпустили, но фамилию записали.']]),
+ST('s20',12,()=>'Авторитет соседнего района',()=>'#8b0000',()=>'Слышал о тебе. Приходи на разговор. Один или с кем хочешь.',()=>[['Пойти с отрядом',()=>P.sq.length?'xp+4 rep+4 cun+1':'h-10 rep-4',()=>P.sq.length?'Твои люди решили дело разговором.':'Один ты там был лишним.'],['Пойти один','fight1h win:rep+10_xp+5','Он проверил тебя кулаками.'],['Не пойти','rep-6','Свои шепчутся.']]),
+ST('s16',12,ld,lc,()=>'Группировка раскололась: ястребы хотят войны, голуби — мира. Выбирай.',()=>[['Ястребы','pow+2 rep+4 f:hawk','Ты выбрал силу.'],['Голуби','cun+2 hon+2 rep+2 f:dove','Ты выбрал ум.'],['Нейтралитет','hon+1 cun+1','Ты сохранил себя.']]),
+ST('s10',13,ld,lc,()=>'Через пару дней на Стрелке соберутся все районы. Там решат, кто чей. Готовься.',()=>[['Собрать отряд','xp+5 rep+3','Люди готовы идти за тобой.'],['Подготовить деньги','cun+1','Запасы не помешают.'],['Позвонить матери','hon+2 h+10','Она сказала: «Береги себя».'],['Купить билет (20 р.)','m-20 f:ticket','Билет — как запасной выход.',20]]),
+ST('s11',14,()=>'Ночь перед Стрелкой',()=>'#556',()=>'Тебе снится двор. Кто ты — тот, кем был, или тот, кем стал?',()=>[['Остаться собой','hon+3','Ты решил: честь — прежде всего.'],['Идти до конца','pow+2 rep+5','Назад пути нет.'],['Сбежать','cun+1 hon-2 f:ticket','Ты запомнил расписание поездов.']]),
+ST('s21',15,ld,lc,()=>'Пора. Все районы на Стрелке. Иди туда и реши свою судьбу.',()=>[['Иду','xp+3','Ты идёшь без оглядки.'],['Помолиться про себя','hon+2','Спокойствие пришло изнутри.']])];
+STORY.length=0;STORY.push(...STORY2);
+CIV.push(['Цыганка','#8a2a6a','Погадаю, красавец! Всю правду скажу.',['Погадать (0.5 р.)','m-0.5 i+1','«Дальняя дорога, казённый дом, бубновый король...»',0.5]],
+['Фотограф','#5a5a7a','Сфотографирую на память! «Полароид», как в Америке.',['Сфотографироваться (1 р.)','m-1 c+1','Снимок вышел внушительным.',1]],
+['Уличный шахматист','#7a6a5a','Сыграем на полтинник? Я не кусаюсь.',['Сыграть на 0.5 р.',()=>rnd()<.5?'m+0.5 i+1':'m-0.5','Сыграли партию. Деньги сменили хозяина.',0.5]],
+['Пьяный','#8a7a6a','Ты чей будешь? А ну пошли выпьем!'],
+['Милиционер-регулировщик','#4a6fa5','Двигаемся, граждане, не задерживаемся!'],
+['Пионер','#c33','Дядь, вы за мир? Мы собираем макулатуру.'],
+['Баба Нюра','#8a6a8a','Всё-то вы бегаете, а в церковь не ходите.'],
+['Продавец газет','#6a8a6a','«Вечерка», «Советский спорт»! Свежие новости!',['Купить газету (5 коп.)','m-0.05 i+1','Прочитал про футбол и погоду.',0.05]],
+['Спортсмен','#3a7a9a','Я с тренировки. Хочешь, покажу приём?',['Тренироваться вместе','s+1 h-5','Усталый, но сильнее.']],
+['Нищий','#6a5a4a','Подайте на хлеб, добрый человек...',['Подать 10 коп.','m-0.1 hon+1','Он перекрестился.',0.1]]);
+EV.push(['Бабушка уронила авоську, картошка покатилась по двору.',[['Помочь собрать','hon+1','Она благодарно закивала.'],['Пройти мимо','hon-1','Хрустнула картошка под ногами.']]],
+['Потерялся мальчик лет шести, плачет.',[['Отвести к милиции','hon+2 xp+1','Мать нашлась через час.'],['Найти мать самому','hon+2 i+1','Нашёл по голосу. Она обняла тебя.'],['Пройти мимо','hon-2','Малыш всё ещё плачет.']]],
+['Пьяный пристаёт к прохожим.',[['Увести его','hon+1 h-3','Довёл до дома.'],['Отшутиться','cun+1','Он ушёл смеясь.'],['Дать по шее','pow+1 hon-1','Урок ему, а тебе — осадок.']]],
+['Продавщица обсчитала тебя на 50 копеек.',[['Потребовать сдачу','hon+1 m+0.5','Вернула, ворча.'],['Махнуть рукой','','Копейки.']]],
+['Сломался автобус, толпа в панике.',[['Помочь выкатить его','hon+1 h-3 c+1','Автобус завёлся.'],['Подождать','','Прождал час.']]],
+['Во дворе свадьба, зовут к столу.',[['Зайти на минутку','h+5 c+1','Налили чаю и накормили.'],['Отказаться','','Вежливо поблагодарил.']]],
+['Соседи ругаются на лестнице.',[['Разнять','hon+1 h-3','Мир восстановлен.'],['Не лезть','','Ругань продолжилась.']]],
+['Таксист просит помочь толкнуть машину.',[['Толкнуть','h-3 m+0.5','Дал полтинник за помощь.'],['Отказать','','']]],
+['Старик просит прикурить.',[['Дать прикурить','hon+1','Рассказал историю про войну.'],['Отказать','','Он вздохнул.']]],
+['Мальчишки играют в карты на деньги.',[['Сыграть','cun+1 m-0.2','Проиграл копейки, но мастерство растёт.'],['Разогнать','hon+1','Они разбежались.'],['Пройти','','']]],
+['Дворовой футбол: не хватает одного игрока.',[['Сыграть','s+1 h-5 c+1','Забил гол!'],['Отказаться','','']]],
+['Огромная очередь за колбасой.',[['Встать в очередь','m-2 h+8 hon+0','Простоял час, но колбаса есть.'],['Пройти мимо','','']]],
+['Продавец «Спортлото» предлагает билетик.',[['Купить (0.5 р.)','m-0.5 f:lotto','Билетик пока лежит в кармане.'],['Отказаться','','']]],
+['Цыганка тянет за рукав: «Позолоти ручку!»',[['Дать полтинник (0.5 р.)','m-0.5 i+1','Нагадала что-то про дорогу.'],['Отмахнуться','','Она прокляла вслед.']]],
+['Фотограф «Полароид» предлагает снимок.',[['Согласиться (1 р.)','m-1 c+1','Снимок вышел как у артиста.'],['Отказаться','','']]],
+['Нищий просит копейку.',[['Подать 10 коп.','m-0.1 hon+1','Он перекрестился.'],['Пройти','','']]],
+['Студенты с гитарой играют на углу.',[['Послушать','c+1 hon+1','Песня запала в душу.'],['Подпеть','c+1 cun+0','Ты чувствовал себя своим.']]],
+['Дворник поймал тебя за курением во дворе.',[['Извиниться','hon+1','Он смягчился.'],['Огрызнуться','pow+1 hon-1','Он погрозил метлой.']]],
+['Пионеры собирают макулатуру.',[['Дать старые газеты','hon+1','Они обрадовались.'],['Отказаться','','']]],
+['Женщина просит помочь донести тяжёлые сумки.',[['Помочь','hon+1 h-3','Она угостила пирожком.'],['Отказать','','']]]);
+
+// ===== КАТСЦЕНЫ, СТАРТ ЧУШПАНОМ =====
+let CUTQ=[],cutI=0,cutDone=null,cutT=-1,cutN=0,cutF=0;
+const rn=()=>fl.in?RK[rk()]:'Чушпан';
+function cutscene(frames,done){CUTQ=frames;cutI=0;cutN=0;cutF=0;cutDone=done;S='cut'}
+function cutNext(){const f=CUTQ[cutI];if(!f){cutEnd();return}if(cutN<f.text.length){cutN=f.text.length;return}cutI++;cutN=0;cutF=0;if(cutI>=CUTQ.length)cutEnd()}
+function cutEnd(){cutT=-1;const d=cutDone;cutDone=null;CUTQ=[];S='play';if(d)d()}
+function drawCast(c){X.save();X.translate(c.x,c.y);X.scale((c.d||1)*c.s,c.s);if(c.lie)X.rotate(1.45);man(0,0,c.c,c.hc,c.mv,0);if(c.bruise){X.fillStyle='#6a3a8a';X.fillRect(-6,-35,5,4);X.fillStyle='#b22';X.fillRect(-2,-27,5,2)}if(c.hit){X.fillStyle='#e6bd9a';X.fillRect(14+Math.abs(Math.sin(cutF/4))*14,-18,9,6)}X.restore()}
+function cutBg(f){const k=f.bg,Q=(c,x,y,w,h)=>{X.fillStyle=c;X.fillRect(x,y,w,h)};SEG=0;
+if(k=='city')skyline();
+else if(k=='street'||k=='station'||k=='river'||k=='market'){const sv=loc;if(k=='station')loc='vokzal';if(k=='river')loc='strelka';if(k=='market')loc='rynok';sky();bgStyle();ground();props();loc=sv}
+else if(k=='room')inside(P.g);
+else if(k=='alley'){const g=X.createLinearGradient(0,0,0,500);g.addColorStop(0,'#14121c');g.addColorStop(1,'#07060a');X.fillStyle=g;X.fillRect(0,0,800,500);for(let y=0;y<300;y+=22)for(let x=-((y/22)%2)*30;x<800;x+=60)Q((x+y)%3?'#2a1a18':'#33201c',x,y,56,18);Q('#15131a',0,300,800,200);Q('#222',700,90,6,220);Q('#444',680,86,46,8);const rg=X.createRadialGradient(703,100,4,703,240,200);rg.addColorStop(0,'rgba(255,200,100,.4)');rg.addColorStop(1,'rgba(255,200,100,0)');X.fillStyle=rg;X.fillRect(480,0,320,400);Q('#1a2a1a',80,262,44,52);Q('#2a2a30',160,330,200,6);X.fillStyle='rgba(120,150,190,.25)';X.beginPath();X.ellipse(400,350,80,10,0,0,7);X.fill()}
+else if(k=='office'){Q('#4a5058',0,0,800,500);Q('#2a2e34',0,300,800,200);Q('#222',560,60,160,120);for(let i=0;i<5;i++)Q('#999',580+i*28,60,4,120);Q('#6a4a2a',200,300,300,50);Q('#ddd',250,285,70,14);Q('#e8e0c0',90,80,80,110);T('ВНИМАНИЕ!',130,120,'#a22','bold 12px monospace','center');Q(cutF%60<30?'#3a7aff':'#223',770,40,14,14)}
+else if(k=='grave'){const g=X.createLinearGradient(0,0,0,300);g.addColorStop(0,'#3a3a4a');g.addColorStop(1,'#8a7a6a');X.fillStyle=g;X.fillRect(0,0,800,500);Q('#2a2a22',0,300,800,200);for(let i=0;i<9;i++){Q('#555',60+i*85,250+(i%3)*14,6,60);Q('#555',48+i*85,262+(i%3)*14,30,6)}for(let i=0;i<4;i++){Q('#1a2a1a',40+i*220,170,12,130);X.fillStyle='#1f3a22';X.beginPath();X.arc(46+i*220,170,40,0,7);X.fill()}}
+else if(k=='field'){const g=X.createLinearGradient(0,0,0,300);g.addColorStop(0,'#1a1a2a');g.addColorStop(1,'#5a4a4a');X.fillStyle=g;X.fillRect(0,0,800,500);for(let i=0;i<5;i++){Q('#3a3a40',20+i*160,170,120,130);Q('#2a2a30',50+i*160,210,60,90)}Q('#2a2620',0,300,800,200);for(let i=0;i<30;i++)Q('#3a3a28',(i*89)%800,310+(i*31)%80,3,10)}
+else if(k=='home'){Q('#6a5a4a',0,0,800,300);for(let i=0;i<40;i++)Q('rgba(0,0,0,.1)',i*20,0,2,300);Q('#3a2c22',0,300,800,200);Q('#9cb4c4',90,70,120,110);Q('#c8a',90,70,28,110);Q('#c8a',182,70,28,110);Q('#7a5a3a',320,290,240,34);Q('#ddd',360,300,40,14);Q('#555',640,170,100,130);Q('#ffd45a',380,50,20,14)}}
+const hr=(x,y,o)=>Object.assign({x,y,c:'#5a6a7a',hc:'#2a1a10',s:1.4},o||{}),ldr=(x,y,o)=>Object.assign({x,y,c:G[P.g][1],hc:'#111',s:1.4},o||{}),npc=(x,y,c,o)=>Object.assign({x,y,c,hc:'#222',s:1.4},o||{});
+function drawCut(){const f=CUTQ[cutI];if(!f){cutEnd();return}cutT=f.t==null?3:f.t;cutF++;X.save();if(f.shake&&cutF%30<14)X.translate((Math.random()-.5)*f.shake,(Math.random()-.5)*f.shake);cutBg(f);for(const c of f.cast||[])drawCast(c);if(f.red&&cutF%30<10){X.fillStyle='rgba(180,0,0,.35)';X.fillRect(-20,-20,840,540)}X.restore();
+X.fillStyle='#000';X.fillRect(0,0,800,34);const v=X.createRadialGradient(400,200,150,400,200,520);v.addColorStop(0,'rgba(0,0,0,0)');v.addColorStop(1,'rgba(0,0,0,.6)');X.fillStyle=v;X.fillRect(0,0,800,370);
+box(0,368,800,132,'#555');cutN=Math.min(f.text.length,cutN+1.3);wrap(f.text.slice(0,cutN|0),750,25,396,19,'#e8e8e8');
+btns.push({x:0,y:0,w:800,h:500,f:cutNext});btn(700,4,90,26,'Пропустить',cutEnd,'#c55','11px monospace');if(cutN>=f.text.length)btn(690,470,100,26,'Далее ▶',cutNext)}
+const INTRO=g=>{const gs=['tp','mi','go','ki'].map(k=>G[k][1]),at=(x,c,o)=>npc(x,345,c,Object.assign({mv:1,hit:1,d:x<400?1:-1},o||{}));return[
+{bg:'city',t:3,text:'Казань, осень 1988-го. Город живёт по двум законам: законам партии и законам двора. Днём — заводы, очереди и плакаты. Вечером — дворы, где у каждого своя власть.'},
+{bg:'alley',t:3,text:'А ты — чушпан. Так здесь называют тех, у кого нет ни своих, ни защиты. Ты идёшь домой через чужие дворы и стараешься не поднимать глаз.',cast:[hr(300,345)]},
+{bg:'alley',t:3,text:'Их было пятеро — из разных группировок: тяп-ляповские, мирные, горские, кировские. Они не спрашивали, откуда ты. Им было важно другое: что ты никому не принадлежишь.',cast:[hr(520,345),npc(240,345,gs[0]),npc(310,350,gs[1]),npc(380,345,gs[2])]},
+{bg:'alley',t:3,shake:12,red:1,text:'Сначала — слова. Потом — кулаки. Ты закрывал голову руками и считал удары, пока не сбился. Никто из прохожих не остановился: во дворах это было нормой.',cast:[hr(400,360,{lie:1,bruise:1}),at(280,gs[0]),at(340,gs[1]),at(470,gs[2]),at(540,gs[3])]},
+{bg:'alley',t:3,text:'Они ушли, смеясь, как после обычного вечера. Ты лежал на холодном асфальте и смотрел им вслед. Не со злостью, а с завистью: они шли плечом к плечу, и никто не смел их тронуть.',cast:[hr(300,365,{lie:1,bruise:1}),npc(560,345,gs[0],{d:-1}),npc(630,350,gs[1],{d:-1})]},
+{bg:'alley',t:3,text:'И тогда ты понял: в этом городе либо бьёшь, либо бьют тебя. Одному не выжить. Нужно стать своим, чтобы больше никто не посмел тронуть.',cast:[hr(400,350,{bruise:1})]},
+{bg:'alley',t:3,text:'К тебе подошёл человек из «'+G[g][0]+'» — '+G[g][2]+'. Он смотрел без жалости, но и без насмешки. «Хочешь к нам? — спросил он. — Бесплатно у нас только по морде».',cast:[hr(300,345,{bruise:1}),ldr(520,345,{d:-1})]},
+{bg:'room',t:1,text:'Чтобы стать своим, нужно заплатить. Пять рублей — взнос. Пока ты не отдашь — ты никто. Ты по-прежнему чушпан.',cast:[ldr(560,345,{d:-1}),hr(260,345,{bruise:1})]}]};
+const CSC={
+s1:()=>[{bg:'room',t:1,text:'В штабе пахло дымом и дешёвым табаком. Старший сидел за столом и разглядывал тебя, как новую вещь. «Чушпанов мы не берём, — сказал он. — Но взять можем. Взнос — пять рублей. Деньги в котёл, и ты уже не один».',cast:[ldr(560,345,{d:-1}),hr(260,345,{bruise:1})]}],
+s1b:()=>[{bg:'room',t:1,text:'Прошло несколько дней. Ты по-прежнему чушпан: взнос так и не внесён. Старший снова вызвал тебя и посмотрел жёстко. «Либо платишь, либо вали».',cast:[ldr(560,345,{d:-1}),hr(260,345)]}],
+s2:()=>[{bg:'street',t:1,text:'Во дворе напротив курили чужие пацаны. Они смотрели на тебя в упор и не отводили взгляд. Ты вспомнил, чьи они, и почувствовал, как напряглись плечи у ребят рядом.',cast:[npc(500,340,'#3a3a5a',{d:-1}),npc(580,350,'#5a3a3a',{d:-1}),hr(220,345)]}],
+s3:()=>[{bg:'street',t:0,text:'Утром у подъезда тебя догнал Сашка — одноклассник, с которым вы раньше воровали яблоки. Он оглядывался и говорил быстро, как будто боялся передумать.',cast:[hr(260,345),npc(420,345,'#4a8a5a',{d:-1})]}],
+s12:()=>[{bg:'home',t:1,text:'Дом напротив. Второй этаж, занавески задёрнуты. За дверью слышно: кто-то ходит и притворяется, что никого нет. Здесь живёт тот, кто не платит. Твой выход.',cast:[hr(300,345)]}],
+s17:()=>[{bg:'home',t:2,text:'Мать сидела на кухне, перед ней на клеёнке лежало то, что она нашла в кармане твоей куртки. Её руки дрожали. Она долго молчала, и от этой тишины было хуже, чем от крика.',cast:[npc(520,345,'#a65b2a',{d:-1}),hr(260,345)]}],
+s13:()=>[{bg:'station',t:1,text:'В вокзальном буфете к тебе подсел парень в чужой куртке. Ты уже знал, чей он. Он положил руки на стол, чтобы ты видел: не за этим пришёл.',cast:[hr(280,345),npc(460,345,'#777',{d:-1})]}],
+s4:()=>[{bg:'room',t:3,text:'В штабе было накурено так, что щипало глаза. Все молчали. Спор шёл о рынке: «Жилку» хотят потеснить, а вместе с ней ещё кого-то. Назревало то, чего не отменить словами.',cast:[ldr(520,345,{d:-1}),npc(380,350,'#555'),hr(250,345)]}],
+s5:()=>[{bg:'office',t:1,text:'В отделении пахло хлоркой и мокрыми тряпками. За решёткой сидел Сашка, бледный, с опущенной головой. Дежурный листал бумаги и делал вид, что тебя нет.',cast:[hr(260,345),npc(540,345,'#4a6fa5',{d:-1})]}],
+s6:()=>[{bg:'room',t:3,text:'Кто-то из своих сдал сходняк. Менты знали время и место. В штабе повисла тишина: каждый смотрел на соседа и искал в нём чужого.',cast:[ldr(520,345,{d:-1}),npc(380,350,'#555'),npc(630,350,'#444',{d:-1}),hr(250,345)]}],
+s14:()=>[{bg:'market',t:1,text:'На рынке пахло хлебом и сыростью. Коммерс окликнул тебя от прилавка и поманил к себе пальцем. «Парень видный, — сказал он. — Люди тебя знают».',cast:[hr(260,345),npc(520,345,'#20b2aa',{d:-1})]}],
+s18:()=>[{bg:'street',t:3,text:'У ДК Химиков играла музыка. Девушка стояла чуть в стороне, будто не принадлежала ни одному двору. Ты поймал её взгляд и понял: сейчас можно вести себя как человек, а не как «свой».',cast:[hr(280,345),npc(450,345,'#c06a8a',{d:-1})]}],
+s7:()=>[{bg:'room',t:3,text:'Сходняк. Прокуренный подвал, лавки вдоль стен, старшие со всех сторон. Каждый ждёт, что скажешь ты. От этого слова зависит, потечёт ли кровь за рынок.',cast:[ldr(520,345,{d:-1}),npc(380,350,'#666'),npc(640,350,'#555',{d:-1}),hr(240,345)]}],
+s8:()=>[{bg:'grave',t:2,text:'Холодным утром похоронили парня из соседнего двора. Мать плакала у ограды, друзья молчали. В толпе шепнули: «Свои постарались». Ты стоял и думал, чья это вина — и твоя ли.',cast:[hr(300,345),npc(480,345,'#444',{d:-1})]}],
+s9:()=>[{bg:'office',t:1,text:'Капитан Рамазанов вызвал тебя сам. Положил на стол конверт и посмотрел так, будто уже всё решил. «Свидетелей у нас много, — сказал он. — Но нужен тот, кто знает всех».',cast:[hr(260,345),npc(540,345,'#4a6fa5',{d:-1})]}],
+s19:()=>[{bg:'room',t:3,text:'Старший сидел у окна и смотрел во двор. «Я своё отходил, — сказал он. — Пусть теперь другие». Он обернулся: «Участок надо передать. Кому?»',cast:[ldr(540,345,{d:-1}),hr(260,345)]}],
+s15:()=>[{bg:'street',t:3,text:'Ночью во двор въехали машины, засвистели свистки. Свет фар резал темноту. Кто-то побежал, кто-то встал у стены. Нужно было решать за секунду.',cast:[hr(260,345),npc(480,345,'#4a6fa5',{d:-1}),npc(580,345,'#4a6fa5',{d:-1})]}],
+s20:()=>[{bg:'field',t:3,text:'Пустырь за гаражами. Ветер гонял пакеты. Он стоял один, руки в карманах. Авторитет соседнего района не любил долгих слов: «Слышал о тебе. Посмотрим, кто ты есть».',cast:[hr(260,345),npc(520,345,'#8b0000',{d:-1})]}],
+s16:()=>[{bg:'room',t:3,text:'В штабе произошёл раскол. Одни кричали, что хватит терпеть и пора показать зубы. Другие — что дорого мы заплатим за такую гордость. Взгляды сходились на тебе.',cast:[ldr(520,345,{d:-1}),npc(380,350,'#555'),npc(640,350,'#777',{d:-1}),hr(250,345)]}],
+s10:()=>[{bg:'river',t:2,text:'Вечером старшие говорили вполголоса: через несколько дней на Стрелке соберутся все районы. Все — значит и те, с кем у тебя счёты, и те, с кем ты сидел за одной партой.',cast:[ldr(520,345,{d:-1}),hr(260,345)]}],
+s11:()=>[{bg:'home',t:3,text:'Ночь перед Стрелкой. Ты ворочался, и перед глазами вставал двор: качели, лавка, чужие кулаки в ту осень. Кем ты был — и кем стал? И кем будешь, когда рассветёт?',cast:[hr(400,345)]}],
+s21:()=>[{bg:'river',t:2,text:'Рассвет над Казанкой. На набережной уже стояли люди — сотни, молча, плечом к плечу. Тишина была такая, что слышно воду. Это и была Стрелка.',cast:[hr(300,345),ldr(480,345,{d:-1})]}]};
+// взнос: чушпан -> скорлупа
+STORY.splice(0,1,ST('s1',1,ld,lc,()=>'Эй, чушпан. Хочешь быть с нами — нужен взнос в общий котёл. Пять рублей.',()=>[['Отдать 5 р.','m-5 rep+8 xp+4 f:in','Старший кивнул: «Вот это по-людски. Теперь ты Скорлупа».',5],['Соврать, что денег нет','cun+1 rep-4','Он прищурился: «Проверим».'],['Отработать — разгрузить машину','h-10 hon+1 xp+3 f:in','Спина болит, зато видят, что не прячешься. Ты принят — Скорлупа.']]));
+STORY.push({id:'s1b',w:()=>act()>=2&&!fl.in,who:ld,c:lc,t:()=>'Взнос не внесён. Либо платишь, либо вали. Последний раз.',o:()=>[['Отдать 5 р.','m-5 rep+4 xp+3 f:in','Он ухмыльнулся: «Наконец-то. Ты Скорлупа».',5],['Отработать','h-10 hon+1 xp+2 f:in','Принят. Скорлупа.']]});
+function story(){P.sd=P.sd||{};for(const b of STORY){if(P.sd[b.id]||!b.w())continue;P.sd[b.id]=1;log('Сюжет: '+b.t().slice(0,40)+'…');const go_=()=>dlg(b.who(),b.c(),b.t(),b.o()),cs=CSC[b.id];if(cs)cutscene(cs(),go_);else go_();return 1}return 0}
+
+// ===== 4. ENGINE =====
+function beep(f){if(!opt.snd)return;try{actx=actx||new AudioContext();const o=actx.createOscillator(),g=actx.createGain();o.frequency.value=f;o.type='square';g.gain.value=.03;o.connect(g);g.connect(actx.destination);o.start();o.stop(actx.currentTime+.05)}catch(e){}}
+function mpos(e){const r=cv.getBoundingClientRect();mx=(e.clientX-r.left)*800/r.width;my=(e.clientY-r.top)*500/r.height}
+cv.addEventListener('mousemove',mpos);
+cv.addEventListener('mousedown',e=>{mpos(e);beep(660);for(let i=btns.length-1;i>=0;i--){const b=btns[i];if(mx>=b.x&&mx<=b.x+b.w&&my>=b.y&&my<=b.y+b.h){b.f();return}}if(S=='play'&&my>90)tgt={x:mx+cam,y:my};else if(S=='fight')punch(F.last==0?1:0)});
+cv.addEventListener('wheel',e=>{if(S=='pause'&&tab==3){ds=cl(ds+(e.deltaY<0?1:-1),0,Math.max(0,dr.length-13));e.preventDefault()}},{passive:false});
+addEventListener('keydown',e=>{keys[e.code]=1;beep(440);const k=e.key,n=/^[1-9]$/.test(k)?+k-1:-1;
+if(e.code=='Tab'||k.indexOf('Arrow')==0||k==' ')e.preventDefault();
+if(S=='disc')S='menu';
+else if(S=='menu'){if(k=='1')S='create',sel=null,nameBuf='';else if(k=='2'&&LS.g('k88'))load()}
+else if(S=='set'||S=='help'){if(k=='Escape')S=back}
+else if(S=='create'){const ae=document.activeElement&&document.activeElement.id=='nm';if(k=='Escape')S='menu';else if(k=='Enter'){if(sel)newGame(sel)}else if(!ae){if(n>=0&&n<8)sel=Object.keys(G)[n];else if(k=='Backspace')nameBuf=nameBuf.slice(0,-1);else if(k.length==1&&nameBuf.length<14)nameBuf+=k}}
+else if(S=='play'){if(e.code=='KeyE'){const b=near();if(b)b.f()}else if(k=='Tab')S='map';else if(e.code=='KeyJ'){S='pause';tab=3}else if(e.code=='KeyR')S='rel';else if(k=='Escape'){S='pause';tab=0}}
+else if(S=='trav'){if(k=='Escape')S='play';else if(n>=0&&tr[n])go(tr[n])}
+else if(S=='dlg'){if(D.n<(D.res||D.text).length){D.n=1e4}else if(D.res||!D.opts.length){if(e.code=='KeyE'||k=='Enter'||k==' ')closeD()}else if(n>=0)pick(n)}
+else if(S=='map'){if(k=='Tab'||k=='Escape')S='play'}
+else if(S=='pause'){if(k=='Escape')S='play';else if(n>=0&&n<5)tab=n}
+else if(S=='fight'){if(k==' ')punch(F.last==0?1:0);else if(e.code=='KeyQ'||e.code=='KeyJ')punch(0);else if(e.code=='KeyE'||e.code=='KeyK')punch(1);else if(e.code=='KeyA'||k=='ArrowLeft')dodge(-1);else if(e.code=='KeyD'||k=='ArrowRight')dodge(1);else if(k=='Escape')flee();else if(n>=0&&n<3)item(n+1)}else if(S=='cut'){if(k=='Escape')cutEnd();else if(e.code=='KeyE'||k=='Enter'||k==' ')cutNext()}else if(S=='rel'){if(k=='Escape'||e.code=='KeyR')S='play'}else if(S=='end'){if(k=='Enter'||k==' '||k=='Escape')S='menu'}});
+addEventListener('keyup',e=>keys[e.code]=0);
+function update(){tick++;if(mt>0)mt--;fightTick();
+if(S=='play'){const W=WW(),y0=sc?290:212;let dx=(keys.KeyD||keys.ArrowRight?1:0)-(keys.KeyA||keys.ArrowLeft?1:0),dy=(keys.KeyS||keys.ArrowDown?1:0)-(keys.KeyW||keys.ArrowUp?1:0);
+if(js&&Math.hypot(js.dx,js.dy)>.25){dx=js.dx;dy=js.dy}if(dx||dy)tgt=null;
+if(tgt){if(tgt.e&&tgt.e.spr){tgt.x=tgt.e.x;tgt.y=tgt.e.y+30}const ty=cl(tgt.y,y0,448),ax=tgt.x-px,ay=ty-py,d=Math.hypot(ax,ay);if(d<10){const f=tgt.f;tgt=null;if(f)f()}else{dx=ax/d;dy=ay/d}}
+moving=(dx||dy)?1:0;const l=Math.hypot(dx,dy)||1;px=cl(px+dx/l*3.6,20,W-20);py=cl(py+dy/l*3.6,y0,448);if(moving){trail.push({x:px,y:py});if(trail.length>300)trail.shift()}
+for(const p of ppl){if(tick%90==(p.n.length*7)%90){p.tx=(Math.random()-.5)*.8;p.ty=(Math.random()-.5)*.4;if(Math.random()<.4)p.tx=p.ty=0}p.x=cl(p.x+(p.tx||0),40,W-40);p.y=cl(p.y+(p.ty||0),300,440);p.mv=Math.abs(p.tx||0)>.01}}}
+function loop(){X.setTransform(2,0,0,2,0,0);btns=[];update();syncInp();discoTick();
+if(S=='fight'&&F)drawFight();else if(inG()){scene();hud();if(S=='play'&&touchUI)touchCtl();if(S=='dlg')drawDlg();if(S=='trav')drawTrav();if(mt>0){box(250,52,300,26,CL.neon);T(msg,400,70,CL.neon,FT,'center')}}else screens();
+post();requestAnimationFrame(loop)}
+loop();
+</script></html>
